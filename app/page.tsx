@@ -1,101 +1,91 @@
-import Image from "next/image";
+'use client';
+import { useState, useEffect } from 'react';
+import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Wallet, Utensils, Zap, MessageSquare, Loader2 } from "lucide-react";
 
-export default function Home() {
+// For this prototype phase, we use the same hardcoded ID we used in the callback
+const MOCK_USER_ID = "a1063603-8032-453d-baee-4e1ccbfdb869"; 
+
+export default function Dashboard() {
+  const [activeTab, setActiveTab] = useState("overview");
+  const [isSyncingING, setIsSyncingING] = useState(false);
+  const [ingConnected, setIngConnected] = useState(false);
+
+  // In a real app, we'd check Supabase for the connection status on load.
+  // For now, we'll let the Sync button handle the 401 "needs_reconnect" fallback.
+  useEffect(() => {
+    // Note: You can add a fetch here later to check `enable_banking_accounts` table
+    setIngConnected(true); // Assuming connected for the UI state, will fail gracefully if not
+  }, []);
+
+  const handleConnectING = () => {
+    // Redirects the user to our Connect API route, which starts the Enable Banking flow
+    window.location.href = '/api/banking/connect';
+  };
+
+  const handleSyncING = async () => {
+    setIsSyncingING(true);
+    try {
+      const res = await fetch('/api/banking/sync', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: MOCK_USER_ID })
+      });
+      
+      const data = await res.json();
+
+      if (res.status === 401 && data.error === 'needs_reconnect') {
+        setIngConnected(false);
+        alert("Sesiunea ING nu există sau a expirat. Te rugăm să conectezi contul.");
+      } else if (res.ok) {
+        alert(`Sincronizare completă! S-au adăugat ${data.added} tranzacții noi.`);
+        // Here you would trigger a re-fetch of the balances from Supabase
+      } else {
+        alert("Eroare la sincronizare: " + data.error);
+      }
+    } catch (error) {
+      console.error("Sync failed", error);
+    } finally {
+      setIsSyncingING(false);
+    }
+  };
+
   return (
-    <div className="grid grid-rows-[20px_1fr_20px] items-center justify-items-center min-h-screen p-8 pb-20 gap-16 sm:p-20 font-[family-name:var(--font-geist-sans)]">
-      <main className="flex flex-col gap-8 row-start-2 items-center sm:items-start">
-        <Image
-          className="dark:invert"
-          src="https://nextjs.org/icons/next.svg"
-          alt="Next.js logo"
-          width={180}
-          height={38}
-          priority
-        />
-        <ol className="list-inside list-decimal text-sm text-center sm:text-left font-[family-name:var(--font-geist-mono)]">
-          <li className="mb-2">
-            Get started by editing{" "}
-            <code className="bg-black/[.05] dark:bg-white/[.06] px-1 py-0.5 rounded font-semibold">
-              app/page.tsx
-            </code>
-            .
-          </li>
-          <li>Save and see your changes instantly.</li>
-        </ol>
+    <div className="min-h-screen bg-[#030712] text-gray-100 font-sans p-4 md:p-8">
+      <header className="flex justify-between items-center mb-8">
+        <h1 className="text-2xl font-bold text-emerald-500">BugetPersonal.</h1>
+        <div className="flex gap-2">
+          
+          {/* Dynamic ING Button */}
+          {!ingConnected ? (
+            <button 
+              onClick={handleConnectING}
+              className="px-4 py-2 text-sm bg-emerald-600 rounded-md hover:bg-emerald-500 transition font-semibold"
+            >
+              Conectează ING
+            </button>
+          ) : (
+            <button 
+              onClick={handleSyncING}
+              disabled={isSyncingING}
+              className="px-4 py-2 text-sm bg-gray-800 rounded-md hover:bg-gray-700 transition flex items-center gap-2 disabled:opacity-50"
+            >
+              {isSyncingING ? <Loader2 className="w-4 h-4 animate-spin" /> : null}
+              {isSyncingING ? 'Se sincronizează...' : 'Sync ING'}
+            </button>
+          )}
 
-        <div className="flex gap-4 items-center flex-col sm:flex-row">
-          <a
-            className="rounded-full border border-solid border-transparent transition-colors flex items-center justify-center bg-foreground text-background gap-2 hover:bg-[#383838] dark:hover:bg-[#ccc] text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5"
-            href="https://vercel.com/new?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            <Image
-              className="dark:invert"
-              src="https://nextjs.org/icons/vercel.svg"
-              alt="Vercel logomark"
-              width={20}
-              height={20}
-            />
-            Deploy now
-          </a>
-          <a
-            className="rounded-full border border-solid border-black/[.08] dark:border-white/[.145] transition-colors flex items-center justify-center hover:bg-[#f2f2f2] dark:hover:bg-[#1a1a1a] hover:border-transparent text-sm sm:text-base h-10 sm:h-12 px-4 sm:px-5 sm:min-w-44"
-            href="https://nextjs.org/docs?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-            target="_blank"
-            rel="noopener noreferrer"
-          >
-            Read our docs
-          </a>
+          <button className="px-4 py-2 text-sm bg-gray-800 rounded-md hover:bg-gray-700 transition">
+            Sync Pluxee
+          </button>
         </div>
-      </main>
-      <footer className="row-start-3 flex gap-6 flex-wrap items-center justify-center">
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org/learn?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/file.svg"
-            alt="File icon"
-            width={16}
-            height={16}
-          />
-          Learn
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://vercel.com/templates?framework=next.js&utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/window.svg"
-            alt="Window icon"
-            width={16}
-            height={16}
-          />
-          Examples
-        </a>
-        <a
-          className="flex items-center gap-2 hover:underline hover:underline-offset-4"
-          href="https://nextjs.org?utm_source=create-next-app&utm_medium=appdir-template-tw&utm_campaign=create-next-app"
-          target="_blank"
-          rel="noopener noreferrer"
-        >
-          <Image
-            aria-hidden
-            src="https://nextjs.org/icons/globe.svg"
-            alt="Globe icon"
-            width={16}
-            height={16}
-          />
-          Go to nextjs.org →
-        </a>
-      </footer>
+      </header>
+
+      {/* ... [KEEP THE REST OF THE TABS AND CARDS EXACTLY AS THEY WERE] ... */}
+      <Tabs defaultValue="overview" className="w-full">
+         {/* ... Tabs List & Content ... */}
+      </Tabs>
     </div>
   );
 }

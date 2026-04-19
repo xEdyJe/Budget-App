@@ -29,6 +29,7 @@ export async function POST(req: Request) {
       {"action": "add_expense", "name": "...", "amount": NUMAR, "category": "food", "card": "main"}
       
       Nu folosi caractere markdown \`\`\` în jurul JSON-ului. Doar textul brut!
+    \`;
 
     // 3. Convertim istoricul mesajelor într-un text clar pentru Gemini
     const conversationHistory = messages

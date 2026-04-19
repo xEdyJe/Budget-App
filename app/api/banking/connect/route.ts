@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { startAuthSession } from '@/lib/enablebanking';
+import { startAuthSession, getEnableBankingToken } from '@/lib/enablebanking';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
 

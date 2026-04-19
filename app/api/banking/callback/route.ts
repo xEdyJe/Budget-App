@@ -35,6 +35,9 @@ export async function GET(req: NextRequest) {
     const sessionDetails = await getSession(realSessionId);
     console.log("✅ Conturi primite:", sessionDetails.accounts?.length);
     
+    // 👇 ADAUGĂ LINIA ASTA:
+    console.log("📦 STRUCTURA BRUTĂ:", JSON.stringify(sessionDetails.accounts, null, 2));
+    
     for (const acc of sessionDetails.accounts) {
       const isSavings = acc.name?.toLowerCase().includes('economii') || acc.name?.toLowerCase().includes('saving');
       const accountType = isSavings ? 'savings' : 'main';

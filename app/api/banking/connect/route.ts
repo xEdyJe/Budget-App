@@ -14,25 +14,30 @@ export async function GET(req: NextRequest) {
     const jwt = await new jose.SignJWT({})
       .setProtectedHeader({ alg: 'RS256', kid: appId })
       .setIssuer(appId)
-      .setAudience(['https://enablebanking.com'])
+      .setAudience('enablebanking.com')
       .setIssuedAt(now)
       .setExpirationTime(now + 3600)
       .sign(privateKey);
 
-    // Afisam JWT-ul si testam
+    // Decodam JWT-ul ca sa vedem exact ce contine
+    const parts = jwt.split('.');
+    const payload = JSON.parse(Buffer.from(parts[1], 'base64url').toString());
+    const header = JSON.parse(Buffer.from(parts[0], 'base64url').toString());
+
+    // Testam API-ul
     const testRes = await fetch('https://api.enablebanking.com/aspsps?country=RO', {
       headers: { 'Authorization': `Bearer ${jwt}` }
     });
     const testData = await testRes.json();
 
     return NextResponse.json({
-      status: testRes.status,
-      appId: appId.substring(0, 8) + '...', // primele 8 caractere ca sa verificam
-      jwtPreview: jwt.substring(0, 80) + '...',
-      response: testData
+      jwtHeader: header,
+      jwtPayload: payload,
+      apiStatus: testRes.status,
+      apiResponse: testData
     });
 
   } catch (error: any) {
-    return NextResponse.json({ error: error.message, stack: error.stack }, { status: 500 });
+    return NextResponse.json({ error: error.message }, { status: 500 });
   }
 }

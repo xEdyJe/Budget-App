@@ -55,14 +55,32 @@ function BalanceCard({ title, balance, icon: Icon, color, subtitle }: {
 }
 
 function MiniCalendar({ selectedDays, onToggle }: {
-  selectedDays: number[]; onToggle: (d: number) => void;
+  selectedDays: string[]; onToggle: (dateStr: string) => void;
 }) {
+  const [currentDate, setCurrentDate] = useState(() => new Date());
+  
+  const year = currentDate.getFullYear();
+  const month = currentDate.getMonth();
+
+  const daysInMonth = new Date(year, month + 1, 0).getDate();
+  const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
+  const offset = firstDayIndex === 0 ? 6 : firstDayIndex - 1; // Align to Monday
+
   const weekDays = ['L','M','M','J','V','S','D'];
-  const offset = 1; // April 2025 starts on Tuesday -> 1
-  const days = Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1);
+  const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
+
+  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+
+  const monthName = currentDate.toLocaleString('ro-RO', { month: 'long' });
 
   return (
     <div>
+      <div style={{ display:'flex', justifyContent:'space-between', alignItems:'center', marginBottom:10 }}>
+        <button onClick={prevMonth} style={{ background:'#1f2937', border:'none', color:'#9ca3af', padding:'4px 8px', borderRadius:4, cursor:'pointer' }}>&lt;</button>
+        <div style={{ fontWeight:700, textTransform:'capitalize' }}>{monthName} {year}</div>
+        <button onClick={nextMonth} style={{ background:'#1f2937', border:'none', color:'#9ca3af', padding:'4px 8px', borderRadius:4, cursor:'pointer' }}>&gt;</button>
+      </div>
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', marginBottom:6 }}>
         {weekDays.map(d => (
           <div key={d} style={{ textAlign:'center', fontSize:11, fontWeight:700, color:'#4b5563' }}>{d}</div>
@@ -71,17 +89,19 @@ function MiniCalendar({ selectedDays, onToggle }: {
       <div style={{ display:'grid', gridTemplateColumns:'repeat(7,1fr)', gap:4 }}>
         {Array.from({ length: offset }).map((_,i) => <div key={`e${i}`} />)}
         {days.map(day => {
-          const isSelected = selectedDays.includes(day);
+          const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
+          const isSelected = selectedDays.includes(dateStr);
           const idx = (day + offset - 1) % 7;
           const isWeekend = idx === 5 || idx === 6;
+          
           return (
-            <button key={day} onClick={() => !isWeekend && onToggle(day)} style={{
+            <button key={day} onClick={() => onToggle(dateStr)} style={{
               borderRadius:6, padding:'5px 0', fontSize:12,
               fontWeight: isSelected ? 700 : 400,
-              cursor: isWeekend ? 'default' : 'pointer',
+              cursor: 'pointer',
               background: isSelected ? 'linear-gradient(135deg,#10b981,#059669)'
                 : isWeekend ? 'transparent' : '#1f2937',
-              color: isSelected ? '#fff' : isWeekend ? '#374151' : '#9ca3af',
+              color: isSelected ? '#fff' : isWeekend ? '#4b5563' : '#9ca3af',
               border: isSelected ? 'none' : '1px solid #1f2937',
               transition: 'all 0.15s'
             }}>{day}</button>
@@ -99,7 +119,7 @@ export default function Dashboard() {
   const [isInitializing, setIsInitializing] = useState(true);
 
   // Work state
-  const [selectedDays, setSelectedDays] = useState<number[]>([]);
+  const [selectedDays, setSelectedDays] = useState<string[]>([]);
   const [hoursPerDay, setHoursPerDay] = useState(8);
   const [hourlyRate, setHourlyRate] = useState(35);
   const [salary, setSalary] = useState<number | null>(null);
@@ -155,11 +175,7 @@ export default function Dashboard() {
         }
         if (data.expenses) setExpenses(data.expenses);
         if (data.workDays) {
-          // Extract specific days from date strings
-          const days = data.workDays.map((wd: any) => {
-            const dateObj = new Date(wd.date);
-            return dateObj.getDate();
-          });
+          const days = data.workDays.map((wd: any) => wd.date);
           setSelectedDays(days);
         }
         if (data.settings?.hourly_rate) setHourlyRate(data.settings.hourly_rate);
@@ -205,8 +221,13 @@ export default function Dashboard() {
         setLastSync(new Date().toLocaleTimeString('ro-RO'));
         alert(`Sync complet! Refresh dashboard pentru a vedea datele noi.`);
         window.location.reload();
+      } else {
+        alert(`Eroare la sync: ${data.error || 'Necunoscută. Verifică consola.'}`);
       }
-    } catch (e) { console.error(e); }
+    } catch (e: any) { 
+        console.error(e); 
+        alert(`A apărut o problemă: ${e.message}`);
+    }
     finally { setIsSyncing(false); }
   };
 
@@ -230,17 +251,12 @@ export default function Dashboard() {
   const handleDelete = (id: string) => setExpenses(prev => prev.filter(e => e.id !== id));
 
   // Toggle work day
-  const toggleDay = async (day: number) => {
-    const isCurrentlySelected = selectedDays.includes(day);
+  const toggleDay = async (dateStr: string) => {
+    const isCurrentlySelected = selectedDays.includes(dateStr);
     // Optimistic UI update
     setSelectedDays(prev =>
-      isCurrentlySelected ? prev.filter(d => d !== day) : [...prev, day].sort((a,b) => a-b)
+      isCurrentlySelected ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort()
     );
-
-    const year = new Date().getFullYear();
-    const month = String(new Date().getMonth() + 1).padStart(2, '0');
-    const dayStr = String(day).padStart(2, '0');
-    const dateStr = `${year}-${month}-${dayStr}`;
 
     try {
       await fetch('/api/work-days/toggle', {

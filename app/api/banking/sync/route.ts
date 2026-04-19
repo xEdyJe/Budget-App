@@ -22,21 +22,27 @@ export async function POST(req: Request) {
     const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
 
     for (const acc of accounts) {
+      // Determinăm tipul cardului bazat pe nume, deoarece coloana "type" nu este expusă clar.
+      let cardType = 'main';
+      if (acc.account_name && (acc.account_name.toLowerCase().includes('economii') || acc.account_name.includes('2') || acc.account_name.toLowerCase().includes('savings'))) {
+          cardType = 'savings';
+      }
+
       // 2. Sync Balances (for both main and savings)
       const balanceData = await getBalances(acc.account_uid);
-      const bookedBalance = balanceData.balances.find((b: any) => b.balance_type === 'CLBD');
+      const bookedBalance = balanceData.balances.find((b: any) => b.balance_type === 'CLBD') || balanceData.balances[0];
       
       if (bookedBalance) {
          await supabase.from('card_balances').upsert({
            user_id: userId,
-           card: acc.type, // 'main' or 'savings'
+           card: cardType, // 'main' or 'savings'
            balance: parseFloat(bookedBalance.balance_amount.amount),
            updated_at: new Date().toISOString()
-         }, { onConflict: 'card' });
+         }, { onConflict: 'card' }).select(); // Am adaugat un mic workaround
       }
 
       // 3. Sync Transactions (ONLY for main account)
-      if (acc.type === 'main') {
+      if (cardType === 'main') {
         const txData = await getTransactions(acc.account_uid, dateFrom);
         const bookedTx = txData.transactions?.booked || [];
 

@@ -66,8 +66,3 @@ export const getBalances = (accountUid: string) =>
 
 export const getTransactions = (accountUid: string, dateFrom: string) =>
   fetchEB(`/accounts/${accountUid}/transactions?date_from=${dateFrom}`);
-// Adaugă asta jos de tot în lib/enablebanking.ts
-// Cerem toată lista de conturi (nu doar unul singur)
-// Cerem detaliile conturilor STRICT pentru sesiunea noastră activă
-export const getSessionAccounts = (sessionId: string) => 
-  fetchEB(`/sessions/${sessionId}/accounts`);

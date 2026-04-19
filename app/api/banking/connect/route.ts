@@ -17,19 +17,31 @@ export async function GET(req: NextRequest) {
       },
       aspsp: { name: "ING", country: "RO" },
       psu_type: "personal",
-      // 👇 IMPORTANT: Pune link-ul tău real de la Vercel aici în loc de textul ăsta
+      // 👇 Pune link-ul tău real de la Vercel aici
       redirect_url: "https://buget-personal.vercel.app/api/banking/callback",
       state: state
     };
 
-    // Apelăm funcția pe care am reparat-o în lib/enablebanking.ts
     const sessionData = await startAuthSession(authPayload);
+    
+    // 1. Radar nou: Printăm exact ce ne-a returnat banca ca să vedem cheile
+    console.log("🟢 DATE SESIUNE ENABLE BANKING:", sessionData); 
 
-    // Salvăm cookie-urile pentru securitate
-    cookies().set('eb_state', state, { httpOnly: true, secure: true, maxAge: 3600 });
-    cookies().set('eb_session_id', sessionData.session_id, { httpOnly: true, secure: true, maxAge: 3600 });
+    // 2. Acoperim ambele variante de nume pe care le-ar putea returna API-ul
+    const sessionIdToSave = sessionData.session_id || sessionData.id;
 
-    // Redirecționăm utilizatorul spre portalul băncii
+    // 3. Blindăm cookie-urile împotriva ștergerii de către browser
+    const cookieOptions = { 
+        httpOnly: true, 
+        secure: true, 
+        maxAge: 3600, 
+        path: '/', 
+        sameSite: 'lax' as const 
+    };
+
+    cookies().set('eb_state', state, cookieOptions);
+    cookies().set('eb_session_id', sessionIdToSave, cookieOptions);
+
     return NextResponse.redirect(sessionData.url);
 
   } catch (error: any) {

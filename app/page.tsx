@@ -1,9 +1,8 @@
 'use client';
 import { useState, useEffect, useRef } from 'react';
-import { Loader2, Wallet, PiggyBank, TrendingDown, Plus, Trash2, Send, RefreshCw, Link } from 'lucide-react';
+import { Loader2, Wallet, PiggyBank, TrendingDown, Plus, Trash2, Send, RefreshCw, Link, Paperclip, Sparkles } from 'lucide-react';
 
 const MOCK_USER_ID = "a1063603-8032-453d-baee-4e1ccbfdb869";
-const HOURLY_RATE = 35;
 const DAYS_IN_MONTH = 30;
 
 const CATEGORIES: Record<string, { label: string; color: string; icon: string }> = {
@@ -28,6 +27,7 @@ type Message = {
   role: 'user' | 'assistant';
   content: string;
   loading?: boolean;
+  image?: string;
 };
 
 // ─── Sub-components ──────────────────────────────────────────────────────────
@@ -58,7 +58,7 @@ function MiniCalendar({ selectedDays, onToggle }: {
   selectedDays: number[]; onToggle: (d: number) => void;
 }) {
   const weekDays = ['L','M','M','J','V','S','D'];
-  const offset = 1; // April 2025 starts on Tuesday
+  const offset = 1; // April 2025 starts on Tuesday -> 1
   const days = Array.from({ length: DAYS_IN_MONTH }, (_, i) => i + 1);
 
   return (
@@ -96,15 +96,16 @@ function MiniCalendar({ selectedDays, onToggle }: {
 
 export default function Dashboard() {
   const [activeTab, setActiveTab] = useState('overview');
+  const [isInitializing, setIsInitializing] = useState(true);
 
   // Work state
-  const [selectedDays, setSelectedDays] = useState<number[]>([1,2,3,4,7,8,9,10,11,14,15]);
+  const [selectedDays, setSelectedDays] = useState<number[]>([]);
   const [hoursPerDay, setHoursPerDay] = useState(8);
+  const [hourlyRate, setHourlyRate] = useState(35);
   const [salary, setSalary] = useState<number | null>(null);
 
   // Expenses state
   const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [loadingExpenses, setLoadingExpenses] = useState(false);
   const [newExp, setNewExp] = useState({ name:'', amount:'', category:'food', card:'main' });
 
   // Balance state
@@ -112,28 +113,83 @@ export default function Dashboard() {
   const [voucherBalance, setVoucherBalance] = useState(0);
   const [savingsBalance, setSavingsBalance] = useState(0);
 
-  // ING sync state
+  // Daily Tips
+  const [dailyTip, setDailyTip] = useState<string | null>(null);
+  const [loadingTip, setLoadingTip] = useState(true);
+
+  // Sync ING
   const [isSyncing, setIsSyncing] = useState(false);
   const [lastSync, setLastSync] = useState<string | null>(null);
 
   // Chat state
   const [messages, setMessages] = useState<Message[]>([{
     role: 'assistant',
-    content: 'Salut! Sunt asistentul tău financiar. Pot să adaug cheltuieli, să calculez economii, sau să îți explic situația financiară. Cu ce te ajut?'
+    content: 'Salut! Încarcă fluturașul tău de salariu aici (butonul paperclip), sau dacă ai alte întrebări.'
   }]);
   const [chatInput, setChatInput] = useState('');
   const [chatLoading, setChatLoading] = useState(false);
+  const [selectedImage, setSelectedImage] = useState<string | null>(null);
   const chatEndRef = useRef<HTMLDivElement>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Derived values
-  const estimatedSalary = selectedDays.length * hoursPerDay * HOURLY_RATE;
+  const estimatedSalary = selectedDays.length * hoursPerDay * hourlyRate;
   const totalMain = expenses.filter(e => e.card === 'main').reduce((s,e) => s + e.amount, 0);
   const totalVoucher = expenses.filter(e => e.card === 'voucher').reduce((s,e) => s + e.amount, 0);
   const savingsPotential = mainBalance * 0.2;
 
+  // Initial Fetch Data
+  useEffect(() => {
+    async function loadDashboard() {
+      try {
+        const res = await fetch('/api/dashboard', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: MOCK_USER_ID })
+        });
+        const data = await res.json();
+        if (data.balances) {
+          setMainBalance(data.balances.main);
+          setSavingsBalance(data.balances.savings);
+          setVoucherBalance(data.balances.voucher);
+        }
+        if (data.expenses) setExpenses(data.expenses);
+        if (data.workDays) {
+          // Extract specific days from date strings
+          const days = data.workDays.map((wd: any) => {
+            const dateObj = new Date(wd.date);
+            return dateObj.getDate();
+          });
+          setSelectedDays(days);
+        }
+        if (data.settings?.hourly_rate) setHourlyRate(data.settings.hourly_rate);
+      } catch (err) {
+        console.error("Failed to load dashboard data", err);
+      } finally {
+        setIsInitializing(false);
+      }
+
+      // Load Tip
+      try {
+        const tipRes = await fetch('/api/tips', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ userId: MOCK_USER_ID })
+        });
+        const tipData = await tipRes.json();
+        if (tipData.tip) setDailyTip(tipData.tip);
+      } catch (err) {
+        console.error("Failed to load tip", err);
+      } finally {
+        setLoadingTip(false);
+      }
+    }
+    loadDashboard();
+  }, []);
+
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
 
-  // Sync ING
+  // Sync Data
   const handleSync = async () => {
     setIsSyncing(true);
     try {
@@ -147,7 +203,8 @@ export default function Dashboard() {
         alert('Sesiunea ING a expirat. Reconectează contul.');
       } else if (res.ok) {
         setLastSync(new Date().toLocaleTimeString('ro-RO'));
-        alert(`Sync complet! ${data.added} tranzacții noi.`);
+        alert(`Sync complet! Refresh dashboard pentru a vedea datele noi.`);
+        window.location.reload();
       }
     } catch (e) { console.error(e); }
     finally { setIsSyncing(false); }
@@ -173,16 +230,50 @@ export default function Dashboard() {
   const handleDelete = (id: string) => setExpenses(prev => prev.filter(e => e.id !== id));
 
   // Toggle work day
-  const toggleDay = (day: number) => setSelectedDays(prev =>
-    prev.includes(day) ? prev.filter(d => d !== day) : [...prev, day].sort((a,b) => a-b)
-  );
+  const toggleDay = async (day: number) => {
+    const isCurrentlySelected = selectedDays.includes(day);
+    // Optimistic UI update
+    setSelectedDays(prev =>
+      isCurrentlySelected ? prev.filter(d => d !== day) : [...prev, day].sort((a,b) => a-b)
+    );
+
+    const year = new Date().getFullYear();
+    const month = String(new Date().getMonth() + 1).padStart(2, '0');
+    const dayStr = String(day).padStart(2, '0');
+    const dateStr = `${year}-${month}-${dayStr}`;
+
+    try {
+      await fetch('/api/work-days/toggle', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: MOCK_USER_ID, date: dateStr, hours: hoursPerDay })
+      });
+    } catch (err) {
+      console.error("Failed to toggle work day", err);
+    }
+  };
+
+  // Image Upload Handle
+  const handleImageChange = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (file) {
+      const reader = new FileReader();
+      reader.onloadend = () => {
+        setSelectedImage(reader.result as string);
+      };
+      reader.readAsDataURL(file);
+    }
+  };
 
   // Chat with AI
   const handleChat = async () => {
-    if (!chatInput.trim() || chatLoading) return;
+    if ((!chatInput.trim() && !selectedImage) || chatLoading) return;
     const userMsg = chatInput.trim();
     setChatInput('');
-    const newMessages: Message[] = [...messages, { role:'user', content: userMsg }];
+    const base64Img = selectedImage;
+    setSelectedImage(null);
+
+    const newMessages: Message[] = [...messages, { role:'user', content: userMsg || 'Am încărcat un fluturaș de salariu.', image: base64Img || undefined }];
     setMessages([...newMessages, { role:'assistant', content:'', loading:true }]);
     setChatLoading(true);
 
@@ -190,12 +281,20 @@ export default function Dashboard() {
       const res = await fetch('/api/chat', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ messages: newMessages.map(m => ({ role:m.role, content:m.content })), userId: MOCK_USER_ID })
+        body: JSON.stringify({ 
+          messages: newMessages.map(m => ({ role:m.role, content:m.content })), 
+          userId: MOCK_USER_ID,
+          message: userMsg,
+          imageBase64: base64Img 
+        })
       });
       const data = await res.json();
       setMessages([...newMessages, { role:'assistant', content: data.text || 'Eroare la răspuns.' }]);
       if (data.actionResult) {
         setTimeout(() => alert(data.actionResult), 300);
+      }
+      if (data.newHourlyRate) {
+        setHourlyRate(data.newHourlyRate);
       }
     } catch {
       setMessages([...newMessages, { role:'assistant', content:'Eroare de conexiune.' }]);
@@ -227,10 +326,16 @@ export default function Dashboard() {
 
   const tabs = [
     { id:'overview', label:'Overview',    icon:'◈' },
-    { id:'work',     label:'Lucru',       icon:'◷' },
+    { id:'work',     label:'Lucru & AI',  icon:'◷' },
     { id:'expenses', label:'Cheltuieli',  icon:'◎' },
-    { id:'chat',     label:'AI Chat',     icon:'✦' },
+    { id:'chat',     label:'Asistent',    icon:'✦' },
   ];
+
+  if (isInitializing) {
+    return <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#030712' }}>
+      <Loader2 size={32} color="#10b981" style={{ animation:'spin 1s linear infinite' }} />
+    </div>;
+  }
 
   return (
     <div style={{ minHeight:'100vh', background:'#030712', color:'#f9fafb',
@@ -282,15 +387,43 @@ export default function Dashboard() {
         {/* ── OVERVIEW ── */}
         {activeTab === 'overview' && (
           <div>
+            {/* AI DAILY TIPS PANEL */}
+            <div style={{
+              background: 'linear-gradient(135deg, #10b98122, #6366f122)',
+              border: '1px solid #10b98144',
+              borderRadius: 16,
+              padding: '24px',
+              marginBottom: 20,
+              display: 'flex',
+              alignItems: 'center',
+              gap: 20
+            }}>
+              <div style={{ background: '#10b981', padding: 16, borderRadius: '50%', color: '#fff' }}>
+                <Sparkles size={32} />
+              </div>
+              <div style={{ flex: 1 }}>
+                <h3 style={{ margin: '0 0 8px 0', fontSize: 18, fontWeight: 800, color: '#f9fafb' }}>Tip-ul Zilei & Financial Goals</h3>
+                {loadingTip ? (
+                  <div style={{ display:'flex', alignItems:'center', gap:8, color:'#9ca3af', fontSize:14 }}>
+                    <Loader2 size={16} style={{ animation:'spin 1s linear infinite' }} /> AI-ul analizează finanțele tale...
+                  </div>
+                ) : (
+                  <p style={{ margin: 0, fontSize: 15, color: '#d1d5db', lineHeight: 1.6 }}>
+                    {dailyTip || "Continuă să îți urmărești cheltuielile pentru ai primi sfaturi noi!"}
+                  </p>
+                )}
+              </div>
+            </div>
+
             {/* Balance Cards */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
               gap:14, marginBottom:20 }}>
               <BalanceCard title="Card Principal (ING)" balance={mainBalance}
                 icon={Wallet} color="#10b981"
-                subtitle={`−${totalMain.toFixed(0)} RON cheltuieli`} />
+                subtitle={`−${totalMain.toFixed(0)} RON cheltuieli luna curentă`} />
               <BalanceCard title="Card Bonuri (Pluxee)" balance={voucherBalance}
                 icon={TrendingDown} color="#6366f1"
-                subtitle={`−${totalVoucher.toFixed(0)} RON cheltuieli`} />
+                subtitle={`−${totalVoucher.toFixed(0)} RON cheltuieli luna curentă`} />
               <BalanceCard title="Cont Economii" balance={savingsBalance}
                 icon={PiggyBank} color="#f59e0b"
                 subtitle="ING Savings" />
@@ -325,13 +458,13 @@ export default function Dashboard() {
               </div>
 
               <div style={cardStyle}>
-                <div style={{ fontWeight:700, marginBottom:16, fontSize:14 }}>Rezumat Lunar</div>
+                <div style={{ fontWeight:700, marginBottom:16, fontSize:14 }}>Rezumat Lunar Calendar</div>
                 {[
                   { label:'Zile lucrate',       value:`${selectedDays.length} / ${DAYS_IN_MONTH}` },
                   { label:'Ore lucrate',         value:`${selectedDays.length * hoursPerDay}h` },
-                  { label:'Salariu estimat',     value:`${estimatedSalary.toLocaleString('ro-RO')} RON` },
-                  { label:'Salariu înregistrat', value: salary ? `${salary.toLocaleString('ro-RO')} RON` : '—' },
-                  { label:'Total cheltuieli',    value:`${(totalMain+totalVoucher).toFixed(2)} RON` },
+                  { label:'Salariu estimat următor', value:`${estimatedSalary.toLocaleString('ro-RO')} RON` },
+                  { label:'Tarif orar curent',   value:`${hourlyRate} RON/oră` },
+                  { label:'Total cheltuieli luate',    value:`${(totalMain+totalVoucher).toFixed(2)} RON` },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display:'flex', justifyContent:'space-between',
                     padding:'10px 0', borderBottom:'1px solid #1f2937' }}>
@@ -341,7 +474,7 @@ export default function Dashboard() {
                 ))}
                 <div style={{ marginTop:12, padding:10, background:'#10b98111',
                   borderRadius:8, border:'1px solid #10b98133', fontSize:11, color:'#10b981' }}>
-                  💬 Spune AI-ului: "am primit 4500 RON luna trecută" ca să înregistrezi salariul
+                  💬 Du-te în Asistent pentru a încărca fluturașul tău de salariu și AI-ul va actualiza valoarea automat!
                 </div>
               </div>
             </div>
@@ -354,7 +487,7 @@ export default function Dashboard() {
             <div style={cardStyle}>
               <div style={{ fontWeight:700, marginBottom:4, fontSize:14 }}>Calendar Lucru</div>
               <div style={{ color:'#6b7280', fontSize:12, marginBottom:16 }}>
-                Click pe zi pentru a marca ca lucrată
+                Click pe zi pentru a marca ca lucrată. Datele se salvează automat.
               </div>
               <MiniCalendar selectedDays={selectedDays} onToggle={toggleDay} />
               <div style={{ marginTop:16, display:'flex', gap:12 }}>
@@ -374,7 +507,7 @@ export default function Dashboard() {
 
             <div style={{ display:'flex', flexDirection:'column', gap:14 }}>
               <div style={cardStyle}>
-                <div style={{ fontWeight:700, marginBottom:16, fontSize:14 }}>Ore pe Zi</div>
+                <div style={{ fontWeight:700, marginBottom:16, fontSize:14 }}>Ore pe Zi standard</div>
                 <div style={{ display:'flex', gap:12, alignItems:'center' }}>
                   <input type="range" min={4} max={12} value={hoursPerDay}
                     onChange={e => setHoursPerDay(+e.target.value)}
@@ -388,12 +521,12 @@ export default function Dashboard() {
               </div>
 
               <div style={cardStyle}>
-                <div style={{ fontWeight:700, marginBottom:4, fontSize:14 }}>Statistici</div>
+                <div style={{ fontWeight:700, marginBottom:4, fontSize:14 }}>Statistici AI Predicție</div>
                 {[
                   { label:'Total zile',     val:`${selectedDays.length}` },
-                  { label:'Total ore',      val:`${selectedDays.length * hoursPerDay}h` },
-                  { label:'Estimare',       val:`${estimatedSalary.toLocaleString('ro-RO')} RON` },
-                  { label:'Tarif/oră',      val:`${HOURLY_RATE} RON` },
+                  { label:'Total ore estimativ',      val:`${selectedDays.length * hoursPerDay}h` },
+                  { label:'Salariu de încasat',       val:`${estimatedSalary.toLocaleString('ro-RO')} RON` },
+                  { label:'Tarif/oră extras',      val:`${hourlyRate} RON` },
                   { label:'Medie/zi',       val:`${(estimatedSalary / (selectedDays.length || 1)).toFixed(0)} RON` },
                 ].map(({ label, val }) => (
                   <div key={label} style={{ display:'flex', justifyContent:'space-between',
@@ -440,14 +573,14 @@ export default function Dashboard() {
             <div style={{ ...cardStyle, padding:0, overflow:'hidden' }}>
               <div style={{ padding:'16px 20px', borderBottom:'1px solid #1f2937',
                 display:'flex', justifyContent:'space-between' }}>
-                <span style={{ fontWeight:700, fontSize:14 }}>Tranzacții</span>
+                <span style={{ fontWeight:700, fontSize:14 }}>Tranzacții Centrale (ING & Pluxee)</span>
                 <span style={{ color:'#10b981', fontWeight:700 }}>
-                  −{(totalMain + totalVoucher).toFixed(2)} RON total
+                  −{(totalMain + totalVoucher).toFixed(2)} RON total selectat
                 </span>
               </div>
               {expenses.length === 0 && (
                 <div style={{ padding:40, textAlign:'center', color:'#4b5563', fontSize:13 }}>
-                  Nicio cheltuială. Adaugă manual sau sincronizează ING / Pluxee.
+                  Nicio cheltuială recentă. Apasă "Sync ING" sau așteaptă citirea Email-urilor Pluxee.
                 </div>
               )}
               {expenses.map(exp => (
@@ -461,10 +594,10 @@ export default function Dashboard() {
                   <div style={{ flex:1 }}>
                     <div style={{ fontWeight:600, fontSize:14 }}>{exp.name}</div>
                     <div style={{ fontSize:11, color:'#6b7280' }}>
-                      {exp.date} · {CATEGORIES[exp.category]?.label} ·{' '}
+                      {exp.date} · {CATEGORIES[exp.category]?.label || 'Altele'} ·{' '}
                       {exp.card === 'main' ? '💳 Principal' : '🎫 Bonuri'} ·{' '}
                       <span style={{ color: exp.source === 'manual' ? '#6b7280'
-                        : exp.source === 'gmail' ? '#6366f1' : '#10b981' }}>
+                        : exp.source === 'pluxee' ? '#6366f1' : '#10b981' }}>
                         {exp.source}
                       </span>
                     </div>
@@ -507,6 +640,12 @@ export default function Dashboard() {
                     color:'#f9fafb', fontSize:13, lineHeight:1.5,
                     border: msg.role === 'user' ? 'none' : '1px solid #374151'
                   }}>
+                    {msg.image && (
+                      <div style={{ marginBottom: 6 }}>
+                        {/* eslint-disable-next-line @next/next/no-img-element */}
+                        <img src={msg.image} alt="Uploaded file" style={{ maxWidth: 200, borderRadius: 8, border: '1px solid #374151' }} />
+                      </div>
+                    )}
                     {msg.loading ? (
                       <span style={{ display:'inline-flex', gap:3 }}>
                         {[0,1,2].map(i => (
@@ -522,15 +661,35 @@ export default function Dashboard() {
               <div ref={chatEndRef} />
             </div>
 
+            {/* Image Preview Block */}
+            {selectedImage && (
+              <div style={{ background: '#1f2937', padding: '8px 12px', display: 'flex', alignItems: 'center', gap: 10 }}>
+                {/* eslint-disable-next-line @next/next/no-img-element */}
+                <img src={selectedImage} alt="preview" style={{ height: 40, width: 40, objectFit: 'cover', borderRadius: 4 }} />
+                <span style={{ fontSize: 12, color: '#9ca3af' }}>Imagine atașată.</span>
+                <button onClick={() => setSelectedImage(null)} style={{ marginLeft: 'auto', background: 'transparent', border:'none', color:'#f87171', cursor:'pointer' }}>x</button>
+              </div>
+            )}
+
             {/* Input */}
             <div style={{ background:'#111827', border:'1px solid #1f2937',
-              borderTop:'none', borderRadius:'0 0 16px 16px',
+              borderTop:'none', borderRadius: selectedImage ? '0 0 16px 16px' : '0 0 16px 16px',
               padding:12, display:'flex', gap:8 }}>
+              
+              <button onClick={() => fileInputRef.current?.click()} style={{
+                background: '#1f2937', border: '1px solid #374151', borderRadius: 8,
+                padding: '8px 12px', cursor: 'pointer', display: 'flex', alignItems: 'center'
+              }}>
+                <Paperclip size={18} color="#9ca3af" />
+              </button>
+              <input type="file" accept="image/*" ref={fileInputRef} style={{ display: 'none' }} onChange={handleImageChange} />
+
               <input style={{ ...inputStyle, flex:1 }}
-                placeholder='Ex: "Am primit 4500 RON luna trecută" sau "Adaugă 89 RON la Lidl"'
+                placeholder='Mesaj sau atașează fluturaș...'
                 value={chatInput}
                 onChange={e => setChatInput(e.target.value)}
                 onKeyDown={e => e.key === 'Enter' && handleChat()} />
+
               <button onClick={handleChat} disabled={chatLoading} style={{
                 background: chatLoading ? '#374151' : 'linear-gradient(135deg,#10b981,#059669)',
                 border:'none', borderRadius:10, color:'#fff', fontWeight:700,
@@ -543,10 +702,9 @@ export default function Dashboard() {
             {/* Quick prompts */}
             <div style={{ marginTop:10, display:'flex', gap:8, flexWrap:'wrap' }}>
               {[
-                'Câți bani am cheltuit pe mâncare?',
-                'Cât pot economisi luna asta?',
-                'Adaugă 89 RON la Lidl pe bonuri',
-                'Am primit 4500 RON luna trecută',
+                'Analizează acest fluturaș de salariu',
+                'Câți bani am cheltuit pe mâncare luna asta?',
+                'Actualizează-mi tariful orar la 45'
               ].map(hint => (
                 <button key={hint} onClick={() => setChatInput(hint)} style={{
                   background:'#1f2937', border:'1px solid #374151', borderRadius:8,

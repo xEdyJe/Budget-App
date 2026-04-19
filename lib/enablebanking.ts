@@ -34,11 +34,13 @@ async function fetchEB(endpoint: string, options: RequestInit = {}) {
   });
 
   if (!res.ok) {
+    const errorBody = await res.text();
+    // Printăm eroarea exactă în consola din Vercel ca să o putem citi
+    console.error("🔴 EROARE ENABLE BANKING DETALIATĂ:", res.status, errorBody);
+    
     if (res.status === 401) throw new Error('EB_UNAUTHORIZED');
-    throw new Error(`Enable Banking API Error: ${res.status} ${res.statusText}`);
+    throw new Error(`Enable Banking API Error: ${res.statusText}`);
   }
-  return res.json();
-}
 
 export const startAuthSession = (body: unknown) =>
   fetchEB('/auth', { method: 'POST', body: JSON.stringify(body) });

@@ -42,6 +42,9 @@ async function fetchEB(endpoint: string, options: RequestInit = {}) {
     throw new Error(`Enable Banking API Error: ${res.statusText}`);
   }
 
+  return res.json();
+}
+
 export const startAuthSession = (body: unknown) =>
   fetchEB('/auth', { method: 'POST', body: JSON.stringify(body) });
 

@@ -49,7 +49,7 @@ export async function POST(req: Request) {
     }
 
     // 5. Apelăm Gemini 1.5 Flash
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash" });
+    const model = genAI.getGenerativeModel({ model: "gemini-1.5-flash-latest" });
     const result = await model.generateContent(parts);
     const replyText = result.response.text();
     

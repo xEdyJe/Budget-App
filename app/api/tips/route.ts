@@ -11,7 +11,7 @@ export async function POST(req: Request) {
 
     // 1. Fetch simplified context
     const { data: balancesData } = await supabase.from('card_balances').select('card, balance').eq('user_id', userId);
-    
+
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const dateLimit = thirtyDaysAgo.toISOString().split('T')[0];
@@ -19,9 +19,9 @@ export async function POST(req: Request) {
     const { data: expenses } = await supabase.from('expenses').select('amount, category').eq('user_id', userId).gte('date', dateLimit);
     const { data: transactions } = await supabase.from('transactions').select('amount, category').eq('user_id', userId).lt('amount', 0).gte('created_at', dateLimit);
 
-    const totalExtExp = (expenses||[]).reduce((sum: number, e: any) => sum + e.amount, 0) + 
-                        (transactions||[]).reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
-                        
+    const totalExtExp = (expenses || []).reduce((sum: number, e: any) => sum + e.amount, 0) +
+      (transactions || []).reduce((sum: number, t: any) => sum + Math.abs(t.amount), 0);
+
     const mainBalance = balancesData?.find((b: any) => b.card === 'main')?.balance || 0;
     const savingsBalance = balancesData?.find((b: any) => b.card === 'savings')?.balance || 0;
 
@@ -40,9 +40,9 @@ export async function POST(req: Request) {
       Format cerut STRICT: returnează doar textul sfatului, fără markdown, fără prefixe precum "Iată un sfat:".
     `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-2.5-flash" });
     const result = await model.generateContent([systemPrompt, "Contextul meu:\n" + summary]);
-    
+
     return NextResponse.json({ tip: result.response.text().trim() });
   } catch (error: any) {
     console.error("Eroare generare tips:", error);

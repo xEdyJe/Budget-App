@@ -21,22 +21,37 @@ export async function GET() {
     }
 
     // 2. Parsăm email-urile
-    const tranzactiiNoi = await parsePluxeeEmails(integration.access_token, userId);
+    const { extractedData: tranzactiiNoi, latestBalance } = await parsePluxeeEmails(integration.access_token, userId);
 
-    if (tranzactiiNoi.length === 0) {
-      return NextResponse.json({ message: "Nu s-au găsit tranzacții noi." });
+    if (tranzactiiNoi.length === 0 && latestBalance === null) {
+      return NextResponse.json({ message: "Nu s-au găsit tranzacții sau solduri noi." });
     }
 
     // 3. Le salvăm în tabela 'transactions' (folosim upsert ca să nu duplicăm)
-    const { error: dbError } = await supabase
-      .from('transactions')
-      .upsert(tranzactiiNoi, { onConflict: 'external_id' });
+    if (tranzactiiNoi.length > 0) {
+      const { error: dbError } = await supabase
+        .from('transactions')
+        .upsert(tranzactiiNoi, { onConflict: 'external_id' });
 
-    if (dbError) throw dbError;
+      if (dbError) throw dbError;
+    }
+
+    // 4. Actualizăm Soldul Voucher direct din email, dacă l-am găsit
+    if (latestBalance !== null) {
+       const { error: balError } = await supabase.from('card_balances').upsert({
+           user_id: userId,
+           card: 'voucher',
+           balance: latestBalance,
+           updated_at: new Date().toISOString()
+       }, { onConflict: 'card' }).select();
+       
+       if (balError) console.error("Eroare update sold voucher:", balError);
+    }
 
     return NextResponse.json({ 
       success: true, 
       count: tranzactiiNoi.length,
+      newBalance: latestBalance,
       data: tranzactiiNoi 
     });
 

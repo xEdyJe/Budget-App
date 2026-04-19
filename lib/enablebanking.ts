@@ -14,7 +14,7 @@ export async function getEnableBankingToken(): Promise<string> {
   const jwt = await new jose.SignJWT({})
     .setProtectedHeader({ alg: 'RS256', kid: appId })
     .setIssuer(appId)
-    .setAudience('enablebanking.com')
+    .setAudience('https://api.enablebanking.com')
     .setIssuedAt(now)
     .setExpirationTime(now + 3600)
     .sign(privateKey);

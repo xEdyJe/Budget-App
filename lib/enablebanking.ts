@@ -48,6 +48,16 @@ async function fetchEB(endpoint: string, options: RequestInit = {}) {
 export const startAuthSession = (body: unknown) =>
   fetchEB('/auth', { method: 'POST', body: JSON.stringify(body) });
 
+// ADAUGĂ ACEASTĂ FUNCȚIE ÎN lib/enablebanking.ts (jos de tot)
+export const createSession = (authorizationId: string, fullRedirectUrl: string) =>
+  fetchEB('/sessions', {
+    method: 'POST',
+    body: JSON.stringify({
+      authorization_id: authorizationId,
+      redirect_url: fullRedirectUrl // Aici îi trimitem înapoi băncii codul ei secret
+    }),
+  });
+
 export const getSession = (sessionId: string) =>
   fetchEB(`/sessions/${sessionId}`);
 

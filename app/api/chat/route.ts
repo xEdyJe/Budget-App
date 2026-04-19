@@ -22,13 +22,13 @@ export async function POST(req: Request) {
       - Sold Card Principal: ${balances?.find((b: any) => b.card === 'main')?.balance || 0} RON
       - Sold Card Bonuri (Pluxee): ${balances?.find((b: any) => b.card === 'voucher')?.balance || 0} RON
       
-      REGULĂ STRICTĂ: Dacă utilizatorul îți cere să faci o acțiune (ex: adaugă o cheltuială) SAU dacă îți dă o imagine cu un fluturaș de salariu, TREBUIE să deduci tariful orar net (salariul net împărțit la numărul de ore) și valoarea bonurilor de masă pe zi.
-      Când detectezi un nou tarif orar, TREBUIE să incluzi un bloc JSON la finalul răspunsului tău pe un singur rând, exact în acest format:
-      {"action": "update_hourly_rate", "rate": NUMBER}
-      Pentru cheltuieli și altele:
-      {"action": "add_expense", "name": "...", "amount": NUMBER, "category": "food|transport|entertainment|utilities|other", "card": "main|voucher"}
-      {"action": "set_salary", "value": NUMBER, "month": "YYYY-MM"}
-    `;
+      REGULĂ STRICTĂ NECELIAZĂ: Când procesezi un fluturaș de salariu, trebuie să deduci tariful orar net (salariul net / nr ore) SAU dacă recunoști o cheltuială nouă, TU EȘTI OBLIGAT să adaugi un bloc JSON la finalul textului. FĂRĂ ACEST JSON, BAZA DE DATE NU SE ACTUALIZEAZĂ.
+      Lipește JSON-ul la final:
+      {"action": "update_hourly_rate", "rate": NUMAR}
+      SAU
+      {"action": "add_expense", "name": "...", "amount": NUMAR, "category": "food", "card": "main"}
+      
+      Nu folosi caractere markdown \`\`\` în jurul JSON-ului. Doar textul brut!
 
     // 3. Convertim istoricul mesajelor într-un text clar pentru Gemini
     const conversationHistory = messages
@@ -53,10 +53,10 @@ export async function POST(req: Request) {
     const result = await model.generateContent(parts);
     const replyText = result.response.text();
 
-    // 6. Căutăm acțiunea ascunsă (Regex-ul tău excelent)
+    // 6. Căutăm acțiunea ascunsă (Regex avansat pentru multiline)
     let actionResult = null;
     let newHourlyRate = null;
-    const jsonMatch = replyText.match(/\{.*"action".*\}/);
+    const jsonMatch = replyText.match(/\{[\s\S]*"action"[\s\S]*\}/);
 
     if (jsonMatch) {
       try {
@@ -97,7 +97,7 @@ export async function POST(req: Request) {
 
     // 7. Trimitem răspunsul către Frontend (fără JSON-ul ascuns)
     return NextResponse.json({
-      text: replyText.replace(/\{.*"action".*\}/, '').trim(),
+      text: replyText.replace(/\{[\s\S]*"action"[\s\S]*\}/, '').replace(/```json/g, '').replace(/```/g, '').trim(),
       actionResult,
       newHourlyRate
     });

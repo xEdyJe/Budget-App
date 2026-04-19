@@ -48,8 +48,8 @@ export async function POST(req: Request) {
       });
     }
 
-    // 5. Apelăm Gemini 1.5 Pro
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    // 5. Apelăm Gemini Pro Vision (compatibilitate maximă)
+    const model = genAI.getGenerativeModel({ model: "gemini-pro-vision" });
     const result = await model.generateContent(parts);
     const replyText = result.response.text();
     

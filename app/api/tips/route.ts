@@ -40,7 +40,7 @@ export async function POST(req: Request) {
       Format cerut STRICT: returnează doar textul sfatului, fără markdown, fără prefixe precum "Iată un sfat:".
     `;
 
-    const model = genAI.getGenerativeModel({ model: "gemini-1.5-pro" });
+    const model = genAI.getGenerativeModel({ model: "gemini-pro" });
     const result = await model.generateContent([systemPrompt, "Contextul meu:\n" + summary]);
     
     return NextResponse.json({ tip: result.response.text().trim() });

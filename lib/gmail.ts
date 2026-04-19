@@ -1,14 +1,14 @@
 export async function parsePluxeeEmails(accessToken: string, userId: string) {
-  // Use Gmail API to search
-  const query = 'from:noreply@pluxee.ro newer_than:30d';
+  // Căutăm email-uri din ultima lună de la Pluxee
+  const query = 'from:pluxee.ro (incarcat OR platit OR suma) newer_than:30d';
   const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}`, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
-  const { messages } = await listRes.json();
   
+  const { messages } = await listRes.json();
   if (!messages) return [];
 
-  const expenses = [];
+  const extractedData = [];
   
   for (const msg of messages) {
     const emailRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages/${msg.id}`, {
@@ -16,26 +16,33 @@ export async function parsePluxeeEmails(accessToken: string, userId: string) {
     });
     const email = await emailRes.json();
     
-    // Find snippet or body
-    const text = email.snippet; // Often enough for Pluxee emails
+    // Luăm snippet-ul ȘI body-ul (decodat din base64 dacă e nevoie, dar snippet e de obicei 90% ok)
+    const content = email.snippet + " " + (email.payload?.body?.data || "");
+
+    // 1. Căutăm suma: prinde "440,00 RON", "12.50 lei", etc.
+    const amountMatch = content.match(/(\d+[.,]\d{2})\s*(RON|lei)/i);
     
-    // Regex tailored for Pluxee RO: "Suma: 34,50 RON" or "Ai platit 12.00 lei la Auchan"
-    const amountMatch = text.match(/(\d+[.,]\d{2})\s*(RON|lei)/i);
-    const merchantMatch = text.match(/la\s+([^.]+)/i); // Simple extraction, can be refined
+    // 2. Detectăm dacă e ÎNCĂRCARE sau PLATĂ
+    const isReload = content.toLowerCase().includes('incarcat') || content.toLowerCase().includes('alimentat');
     
+    // 3. Încercăm să găsim comerciantul (doar pentru plăți)
+    const merchantMatch = content.match(/(?:la|comerciantul)\s+([^,.]+)/i);
+
     if (amountMatch) {
-      expenses.push({
+      const amount = parseFloat(amountMatch[1].replace(',', '.'));
+      
+      extractedData.push({
         user_id: userId,
         external_id: msg.id,
-        amount: parseFloat(amountMatch[1].replace(',', '.')),
-        name: merchantMatch ? merchantMatch[1].trim() : 'Comerciant Pluxee',
-        category: 'food', // Voucher defaults to food
-        card: 'voucher',
-        source: 'gmail',
-        date: new Date(parseInt(email.internalDate)).toISOString().split('T')[0]
+        // Dacă e încărcare e cu PLUS, dacă e plată e cu MINUS
+        amount: isReload ? amount : -amount, 
+        description: isReload ? 'Încărcare Tichete Pluxee' : `Plată: ${merchantMatch ? merchantMatch[1].trim() : 'Comerciant Pluxee'}`,
+        category: 'Food',
+        source: 'Pluxee',
+        date: new Date(parseInt(email.internalDate)).toISOString()
       });
     }
   }
   
-  return expenses;
+  return extractedData;
 }

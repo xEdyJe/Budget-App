@@ -102,8 +102,10 @@ export async function POST(req: Request) {
       newHourlyRate 
     });
 
-  } catch (error) {
+  } catch (error: any) {
     console.error("Eroare la procesarea cererii Gemini:", error);
-    return NextResponse.json({ error: 'Eroare la procesarea cererii' }, { status: 500 });
+    return NextResponse.json({ 
+      text: `Eroare Tehnică Server: ${error.message || 'Necunoscută'}. Verifică consola terminalului!` 
+    }, { status: 500 });
   }
 }

@@ -158,34 +158,40 @@ export default function Dashboard() {
   const totalVoucher = expenses.filter(e => e.card === 'voucher').reduce((s,e) => s + e.amount, 0);
   const savingsPotential = mainBalance * 0.2;
 
+  // Function to load all data from database seamlessly
+  const fetchDashboardData = async (silent = false) => {
+    if (!silent) setIsInitializing(true);
+    try {
+      const res = await fetch('/api/dashboard', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: MOCK_USER_ID })
+      });
+      const data = await res.json();
+      if (data.balances) {
+        setMainBalance(data.balances.main);
+        setSavingsBalance(data.balances.savings);
+        setVoucherBalance(data.balances.voucher);
+      }
+      if (data.expenses) setExpenses(data.expenses);
+      if (data.workDays) {
+        const days = data.workDays.map((wd: any) => wd.date);
+        setSelectedDays(days);
+      }
+      if (data.settings?.hourly_rate) setHourlyRate(data.settings.hourly_rate);
+    } catch (err) {
+      console.error("Failed to load dashboard data", err);
+    } finally {
+      if (!silent) setIsInitializing(false);
+    }
+  };
+
   // Initial Fetch Data
   useEffect(() => {
-    async function loadDashboard() {
-      try {
-        const res = await fetch('/api/dashboard', {
-          method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ userId: MOCK_USER_ID })
-        });
-        const data = await res.json();
-        if (data.balances) {
-          setMainBalance(data.balances.main);
-          setSavingsBalance(data.balances.savings);
-          setVoucherBalance(data.balances.voucher);
-        }
-        if (data.expenses) setExpenses(data.expenses);
-        if (data.workDays) {
-          const days = data.workDays.map((wd: any) => wd.date);
-          setSelectedDays(days);
-        }
-        if (data.settings?.hourly_rate) setHourlyRate(data.settings.hourly_rate);
-      } catch (err) {
-        console.error("Failed to load dashboard data", err);
-      } finally {
-        setIsInitializing(false);
-      }
+    fetchDashboardData();
 
-      // Load Tip
+    // Load Tip
+    async function fetchTip() {
       try {
         const tipRes = await fetch('/api/tips', {
           method: 'POST',
@@ -200,29 +206,73 @@ export default function Dashboard() {
         setLoadingTip(false);
       }
     }
-    loadDashboard();
+    fetchTip();
+
+    // Auto-Sync and Silent Polling Logic
+    const silentSync = async () => {
+      try {
+        await fetch('/api/banking/sync', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ userId: MOCK_USER_ID }) });
+        await fetch('/api/gmail/sync');
+        fetchDashboardData(true); // refetch visually seamlessly
+      } catch (e) {
+        console.error("Silent sync failed", e);
+      }
+    };
+
+    const handleVisibilityChange = () => {
+      if (document.visibilityState === 'visible') {
+        silentSync(); // when user brings app back to screen exactly as requested
+      }
+    };
+
+    document.addEventListener("visibilitychange", handleVisibilityChange);
+    
+    // Polling every 2 minutes ONLY when app is visible on screen
+    const interval = setInterval(() => {
+      if (document.visibilityState === 'visible') {
+        silentSync();
+      }
+    }, 2 * 60 * 1000);
+
+    return () => {
+      document.removeEventListener("visibilitychange", handleVisibilityChange);
+      clearInterval(interval);
+    };
   }, []);
 
   useEffect(() => { chatEndRef.current?.scrollIntoView({ behavior:'smooth' }); }, [messages]);
 
-  // Sync Data
+  // Manual Sync Data Button
   const handleSync = async () => {
     setIsSyncing(true);
     try {
-      const res = await fetch('/api/banking/sync', {
+      const resING = await fetch('/api/banking/sync', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ userId: MOCK_USER_ID })
       });
-      const data = await res.json();
-      if (res.status === 401 && data.error === 'needs_reconnect') {
+      const dataING = await resING.json();
+
+      if (resING.status === 401 && dataING.error === 'needs_reconnect') {
         alert('Sesiunea ING a expirat. Reconectează contul.');
-      } else if (res.ok) {
+        setIsSyncing(false);
+        return;
+      }
+
+      const resGmail = await fetch('/api/gmail/sync');
+      const dataGmail = await resGmail.json();
+
+      if (resING.ok || resGmail.ok) {
         setLastSync(new Date().toLocaleTimeString('ro-RO'));
-        alert(`Sync complet! Refresh dashboard pentru a vedea datele noi.`);
-        window.location.reload();
+        
+        let msg = `Sync complet!`;
+        if (dataGmail.newBalance) msg += `\nSold Pluxee actualizat la ${dataGmail.newBalance} RON.`;
+        
+        // Remove reload, use our seamless fetcher!
+        await fetchDashboardData(true);
+        alert(msg);
       } else {
-        alert(`Eroare la sync: ${data.error || 'Necunoscută. Verifică consola.'}`);
+        alert(`Eroare la sync. ING: ${dataING.error}. Gmail: ${dataGmail.error}`);
       }
     } catch (e: any) { 
         console.error(e); 
@@ -307,10 +357,13 @@ export default function Dashboard() {
       const data = await res.json();
       setMessages([...newMessages, { role:'assistant', content: data.text || 'Eroare la răspuns.' }]);
       if (data.actionResult) {
+        // Automatically fetch to show updates seamlessly
+        fetchDashboardData(true);
         setTimeout(() => alert(data.actionResult), 300);
       }
       if (data.newHourlyRate) {
         setHourlyRate(data.newHourlyRate);
+        fetchDashboardData(true);
       }
     } catch {
       setMessages([...newMessages, { role:'assistant', content:'Eroare de conexiune.' }]);
@@ -599,9 +652,14 @@ export default function Dashboard() {
                   Nicio cheltuială recentă. Apasă "Sync ING" sau așteaptă citirea Email-urilor Pluxee.
                 </div>
               )}
-              {expenses.map(exp => (
-                <div key={exp.id} style={{ display:'flex', alignItems:'center', gap:14,
-                  padding:'14px 20px', borderBottom:'1px solid #1f2937' }}>
+              {expenses.map((exp, index) => (
+                <div key={exp.id} style={{ 
+                  display:'flex', alignItems:'center', gap:14,
+                  padding:'14px 20px', borderBottom:'1px solid #1f2937',
+                  animation: `slideIn 0.4s ease-out forwards`,
+                  animationDelay: `${Math.min(index * 0.05, 0.5)}s`,
+                  opacity: 0 // starts invisible for animation
+                }}>
                   <div style={{ width:36, height:36, borderRadius:10, flexShrink:0,
                     background:`${CATEGORIES[exp.category]?.color || '#6b7280'}22`,
                     display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>
@@ -736,6 +794,10 @@ export default function Dashboard() {
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
+        @keyframes slideIn { 
+          from { opacity: 0; transform: translateY(-15px) scale(0.98); } 
+          to { opacity: 1; transform: translateY(0) scale(1); } 
+        }
         button:hover { opacity: 0.85; }
       `}</style>
     </div>

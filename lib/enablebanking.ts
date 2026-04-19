@@ -2,7 +2,6 @@ import * as jose from 'jose';
 
 const BASE_URL = 'https://api.enablebanking.com';
 
-// 1. Generate JWT
 export async function getEnableBankingToken(): Promise<string> {
   const appId = process.env.ENABLE_BANKING_APP_ID!;
   const privateKeyPem = process.env.ENABLE_BANKING_PRIVATE_KEY!
@@ -15,6 +14,7 @@ export async function getEnableBankingToken(): Promise<string> {
   const jwt = await new jose.SignJWT({})
     .setProtectedHeader({ alg: 'RS256', kid: appId })
     .setIssuer(appId)
+    .setAudience('enablebanking.com')
     .setIssuedAt(now)
     .setExpirationTime(now + 3600)
     .sign(privateKey);
@@ -22,7 +22,6 @@ export async function getEnableBankingToken(): Promise<string> {
   return jwt;
 }
 
-// 2. Fetch Helper
 async function fetchEB(endpoint: string, options: RequestInit = {}) {
   const token = await getEnableBankingToken();
   const res = await fetch(`${BASE_URL}${endpoint}`, {
@@ -36,14 +35,19 @@ async function fetchEB(endpoint: string, options: RequestInit = {}) {
 
   if (!res.ok) {
     if (res.status === 401) throw new Error('EB_UNAUTHORIZED');
-    throw new Error(`Enable Banking API Error: ${res.statusText}`);
+    throw new Error(`Enable Banking API Error: ${res.status} ${res.statusText}`);
   }
   return res.json();
 }
 
-// 3. API Wrappers
-export const startAuthSession = (body: any) => fetchEB('/auth', { method: 'POST', body: JSON.stringify(body) });
-export const getSession = (sessionId: string) => fetchEB(`/sessions/${sessionId}`);
-export const getBalances = (accountUid: string) => fetchEB(`/accounts/${accountUid}/balances`);
-export const getTransactions = (accountUid: string, dateFrom: string) => 
+export const startAuthSession = (body: unknown) =>
+  fetchEB('/auth', { method: 'POST', body: JSON.stringify(body) });
+
+export const getSession = (sessionId: string) =>
+  fetchEB(`/sessions/${sessionId}`);
+
+export const getBalances = (accountUid: string) =>
+  fetchEB(`/accounts/${accountUid}/balances`);
+
+export const getTransactions = (accountUid: string, dateFrom: string) =>
   fetchEB(`/accounts/${accountUid}/transactions?date_from=${dateFrom}`);

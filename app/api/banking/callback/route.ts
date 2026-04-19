@@ -1,5 +1,5 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, getSession, getAllAccounts } from '@/lib/enablebanking';
+import { createSession, getSessionAccounts } from '@/lib/enablebanking';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
@@ -20,40 +20,34 @@ export async function GET(req: NextRequest) {
   try {
     const userId = "a1063603-8032-453d-baee-4e1ccbfdb869"; 
 
-    // 1. Validăm sesiunea
+    // 1. Validăm sesiunea cu parola de la ING
     const newSession = await createSession(authId, codeQuery);
     const realSessionId = newSession.session_id;
 
-    // 2. Extragem lista de ID-uri de la sesiune
-    const sessionDetails = await getSession(realSessionId);
-    const accountUids = sessionDetails.accounts || [];
+    // 2. Extragem detaliile complete folosind noul endpoint!
+    console.log("⏳ Cerem detaliile conturilor pentru sesiunea:", realSessionId);
     
-    // 3. Descărcăm TOATE detaliile conturilor de la bancă
-    console.log("⏳ Cerem detaliile tuturor conturilor...");
-    const allAccountsRes = await getAllAccounts();
-    const allAccounts = allAccountsRes.accounts || [];
+    const sessionAccountsData = await getSessionAccounts(realSessionId);
+    // În funcție de cum ne dă banca, luăm array-ul direct sau din proprietatea 'accounts'
+    const accountsArray = sessionAccountsData.accounts || sessionAccountsData; 
 
-    // 4. Potrivim ID-urile cu detaliile și salvăm
-    for (const uid of accountUids) {
-      // Căutăm contul nostru în lista mare primită de la bancă
-      const acc = allAccounts.find((a: any) => a.uid === uid);
-
-      if (!acc) {
-        console.error(`🔴 Nu s-au găsit detalii pentru UID-ul: ${uid}`);
-        continue; // Trecem la următorul dacă nu-l găsește
-      }
+    // 3. Iterăm prin conturile primite și le salvăm direct
+    for (const acc of accountsArray) {
+      // Un sistem de siguranță ca să nu mai dăm de 'undefined'
+      const accountUid = acc.uid || acc.id; 
+      if (!accountUid) continue;
 
       const accountName = acc.name || acc.product || 'Cont ING';
       const isSavings = accountName.toLowerCase().includes('economii') || accountName.toLowerCase().includes('saving');
       const accountType = isSavings ? 'savings' : 'main';
-      const iban = acc.account_id?.iban || 'Fără IBAN';
+      const iban = acc.account_id?.iban || acc.iban || 'Fără IBAN';
       const currency = acc.currency || 'RON';
 
-      console.log(`💾 Salvăm în baza de date: ${accountName} (${currency}) cu IBAN ${iban}`);
+      console.log(`💾 Salvăm: ${accountName} (${currency}) cu IBAN ${iban}`);
 
       const { error: dbError } = await supabase.from('enable_banking_accounts').upsert({
         user_id: userId,
-        account_uid: uid,
+        account_uid: accountUid,
         account_name: accountName,
         iban: iban,
         currency: currency,
@@ -67,6 +61,7 @@ export async function GET(req: NextRequest) {
       }
     }
 
+    // Curățăm cookie-urile că ne-am terminat treaba
     cookies().delete('eb_state');
     cookies().delete('eb_session_id');
 

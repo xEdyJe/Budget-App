@@ -5,18 +5,18 @@ const BASE_URL = 'https://api.enablebanking.com';
 // 1. Generate JWT
 export async function getEnableBankingToken(): Promise<string> {
   const appId = process.env.ENABLE_BANKING_APP_ID!;
-  // Fix potential newline escaping issues from .env
-  const privateKeyPem = process.env.ENABLE_BANKING_PRIVATE_KEY!.replace(/\\n/g, '\n');
+  const privateKeyPem = process.env.ENABLE_BANKING_PRIVATE_KEY!
+    .replace(/\\n/g, '\n')
+    .trim();
 
   const privateKey = await jose.importPKCS8(privateKeyPem, 'RS256');
   const now = Math.floor(Date.now() / 1000);
 
-  const jwt = await new jose.SignJWT({
-    iss: appId,
-    iat: now,
-    exp: now + 3600, // 1 hour expiry
-  })
+  const jwt = await new jose.SignJWT({})
     .setProtectedHeader({ alg: 'RS256', kid: appId })
+    .setIssuer(appId)
+    .setIssuedAt(now)
+    .setExpirationTime(now + 3600)
     .sign(privateKey);
 
   return jwt;

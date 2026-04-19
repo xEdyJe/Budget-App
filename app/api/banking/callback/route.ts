@@ -9,24 +9,26 @@ export async function GET(req: NextRequest) {
   console.log("🟢 CALLBACK INIȚIAT");
   const url = new URL(req.url);
   const stateQuery = url.searchParams.get('state');
+  const codeQuery = url.searchParams.get('code'); // 👇 Extragem codul secret din link
 
   const savedState = cookies().get('eb_state')?.value;
-  const authId = cookies().get('eb_session_id')?.value; // Acesta e authorization_id-ul nostru
+  const authId = cookies().get('eb_session_id')?.value; 
 
   console.log("🔍 State primit:", stateQuery);
   console.log("🔍 Auth ID:", authId);
+  console.log("🔍 Code primit:", codeQuery);
 
-  if (!stateQuery || stateQuery !== savedState || !authId) {
-    console.error("🔴 EROARE: Cookie-uri lipsă sau state invalid.");
+  if (!stateQuery || stateQuery !== savedState || !authId || !codeQuery) {
+    console.error("🔴 EROARE: Cookie-uri lipsă, state invalid sau code lipsă.");
     return NextResponse.redirect(new URL('/?error=invalid_state', req.url));
   }
 
   try {
     const userId = "a1063603-8032-453d-baee-4e1ccbfdb869"; 
 
-    console.log("⏳ Pas 1: Schimbăm chitanța pe o sesiune validă...");
-    // Aici trimitem băncii url-ul complet cu care ne-a întors (req.url)
-    const newSession = await createSession(authId, req.url);
+    console.log("⏳ Pas 1: Schimbăm chitanța + codul pe o sesiune validă...");
+    // 👇 Îi dăm funcției authorization_id și codul primit de la ING
+    const newSession = await createSession(authId, codeQuery);
     const realSessionId = newSession.session_id;
 
     console.log("⏳ Pas 2: Apelăm Enable Banking pentru extragerea conturilor...");

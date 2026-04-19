@@ -19,9 +19,20 @@ export async function GET(req: NextRequest) {
       },
       aspsp: { name: "ING", country: "RO" },
       psu_type: "personal",
-      redirect_url: "https://buget-personal.vercel.app/api/banking/callback",
+      redirect_url: "https://buget-personal-gkjbh4t0n-xedyjes-projects.vercel.app/api/banking/callback",
       state: state
     };
+
+    const token = await getEnableBankingToken();
+console.log('JWT:', token.substring(0, 100));
+
+// Test direct
+const testRes = await fetch('https://api.enablebanking.com/aspsps', {
+  headers: { 'Authorization': `Bearer ${token}` }
+});
+console.log('Test status:', testRes.status);
+const testData = await testRes.json();
+console.log('Test response:', JSON.stringify(testData).substring(0, 200));
 
     const sessionData = await startAuthSession(authPayload);
 

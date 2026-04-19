@@ -66,3 +66,6 @@ export const getBalances = (accountUid: string) =>
 
 export const getTransactions = (accountUid: string, dateFrom: string) =>
   fetchEB(`/accounts/${accountUid}/transactions?date_from=${dateFrom}`);
+// Adaugă asta jos de tot în lib/enablebanking.ts
+export const getAccountDetails = (accountUid: string) =>
+  fetchEB(`/accounts/${accountUid}`);

@@ -1,62 +1,57 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { createSession, getSession } from '@/lib/enablebanking';
+import { createSession, getSession, getAccountDetails } from '@/lib/enablebanking';
 import { cookies } from 'next/headers';
 import { createClient } from '@supabase/supabase-js';
 
 const supabase = createClient(process.env.NEXT_PUBLIC_SUPABASE_URL!, process.env.SUPABASE_SERVICE_ROLE_KEY!);
 
 export async function GET(req: NextRequest) {
-  console.log("🟢 CALLBACK INIȚIAT");
   const url = new URL(req.url);
   const stateQuery = url.searchParams.get('state');
-  const codeQuery = url.searchParams.get('code'); // 👇 Extragem codul secret din link
+  const codeQuery = url.searchParams.get('code'); 
 
   const savedState = cookies().get('eb_state')?.value;
   const authId = cookies().get('eb_session_id')?.value; 
 
-  console.log("🔍 State primit:", stateQuery);
-  console.log("🔍 Auth ID:", authId);
-  console.log("🔍 Code primit:", codeQuery);
-
   if (!stateQuery || stateQuery !== savedState || !authId || !codeQuery) {
-    console.error("🔴 EROARE: Cookie-uri lipsă, state invalid sau code lipsă.");
     return NextResponse.redirect(new URL('/?error=invalid_state', req.url));
   }
 
   try {
     const userId = "a1063603-8032-453d-baee-4e1ccbfdb869"; 
 
-    console.log("⏳ Pas 1: Schimbăm chitanța + codul pe o sesiune validă...");
-    // 👇 Îi dăm funcției authorization_id și codul primit de la ING
+    // 1. Validăm sesiunea
     const newSession = await createSession(authId, codeQuery);
     const realSessionId = newSession.session_id;
 
-    console.log("⏳ Pas 2: Apelăm Enable Banking pentru extragerea conturilor...");
+    // 2. Extragem lista de ID-uri (String-uri)
     const sessionDetails = await getSession(realSessionId);
-    console.log("✅ Conturi primite:", sessionDetails.accounts?.length);
     
-    // 👇 ADAUGĂ LINIA ASTA:
-    console.log("📦 STRUCTURA BRUTĂ:", JSON.stringify(sessionDetails.accounts, null, 2));
-    
-    for (const acc of sessionDetails.accounts) {
-      const isSavings = acc.name?.toLowerCase().includes('economii') || acc.name?.toLowerCase().includes('saving');
-      const accountType = isSavings ? 'savings' : 'main';
+    // 3. Extragem detaliile PENTRU FIECARE ID
+    for (const uid of sessionDetails.accounts) {
+      console.log(`⏳ Cerem detalii complete pentru contul UID: ${uid}`);
+      const acc = await getAccountDetails(uid);
 
-      console.log(`💾 Salvăm: ${acc.name} (${acc.currency})`);
+      // Sistem de siguranță: unele bănci dau .name, altele .product, altele nimic
+      const accountName = acc.name || acc.product || 'Cont ING';
+      const isSavings = accountName.toLowerCase().includes('economii') || accountName.toLowerCase().includes('saving');
+      const accountType = isSavings ? 'savings' : 'main';
+      const iban = acc.account_id?.iban || 'Fără IBAN';
+      const currency = acc.currency || 'RON';
+
+      console.log(`💾 Salvăm în baza de date: ${accountName} (${currency}) cu IBAN ${iban}`);
 
       const { error: dbError } = await supabase.from('enable_banking_accounts').upsert({
         user_id: userId,
-        account_uid: acc.uid,
-        account_name: acc.name,
-        iban: acc.account_id?.iban,
-        currency: acc.currency,
+        account_uid: uid,       // Folosim string-ul curat primit la început
+        account_name: accountName,
+        iban: iban,
+        currency: currency,
         type: accountType
       }, { onConflict: 'account_uid' });
 
       if (dbError) {
         console.error("🔴 EROARE DB:", dbError);
-      } else {
-        console.log(`✅ Cont salvat: ${acc.name}`);
       }
     }
 

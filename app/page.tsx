@@ -54,13 +54,12 @@ function BalanceCard({ title, balance, icon: Icon, color, subtitle }: {
   );
 }
 
-function MiniCalendar({ selectedDays, onSelect }: {
+function MiniCalendar({ selectedDays, onSelect, calendarDate, setCalendarDate }: {
   selectedDays: Record<string, number>; onSelect: (dateStr: string) => void;
+  calendarDate: Date; setCalendarDate: (d: Date) => void;
 }) {
-  const [currentDate, setCurrentDate] = useState(() => new Date());
-  
-  const year = currentDate.getFullYear();
-  const month = currentDate.getMonth();
+  const year = calendarDate.getFullYear();
+  const month = calendarDate.getMonth();
 
   const daysInMonth = new Date(year, month + 1, 0).getDate();
   const firstDayIndex = new Date(year, month, 1).getDay(); // 0 is Sunday
@@ -69,10 +68,10 @@ function MiniCalendar({ selectedDays, onSelect }: {
   const weekDays = ['L','M','M','J','V','S','D'];
   const days = Array.from({ length: daysInMonth }, (_, i) => i + 1);
 
-  const prevMonth = () => setCurrentDate(new Date(year, month - 1, 1));
-  const nextMonth = () => setCurrentDate(new Date(year, month + 1, 1));
+  const prevMonth = () => setCalendarDate(new Date(year, month - 1, 1));
+  const nextMonth = () => setCalendarDate(new Date(year, month + 1, 1));
 
-  const monthName = currentDate.toLocaleString('ro-RO', { month: 'long' });
+  const monthName = calendarDate.toLocaleString('ro-RO', { month: 'long' });
 
   return (
     <div>
@@ -146,6 +145,7 @@ export default function Dashboard() {
   const [isInitializing, setIsInitializing] = useState(true);
 
   // Work state
+  const [calendarDate, setCalendarDate] = useState(() => new Date());
   const [selectedDays, setSelectedDays] = useState<Record<string, number>>({});
   const [editingDate, setEditingDate] = useState<string | null>(null);
   const [editingHours, setEditingHours] = useState(8);
@@ -181,10 +181,23 @@ export default function Dashboard() {
   const chatEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  // Derived values
-  const currentWorkDaysCount = Object.keys(selectedDays).length;
-  const totalHoursWorked = Object.values(selectedDays).reduce((s, h) => s + h, 0);
+  // Derived values for View Month (Calendar Tab)
+  const calendarYearMonth = `${calendarDate.getFullYear()}-${String(calendarDate.getMonth() + 1).padStart(2, '0')}`;
+  const viewedMonthDates = Object.keys(selectedDays).filter(d => d.startsWith(calendarYearMonth));
+  const currentWorkDaysCount = viewedMonthDates.length;
+  const totalHoursWorked = viewedMonthDates.reduce((s, k) => s + selectedDays[k], 0);
   const estimatedSalary = totalHoursWorked * hourlyRate;
+  const estimatedVouchersAmount = (totalHoursWorked / 8) * 40;
+
+  // Derived predictive values for Current Real Month (Overview Tab)
+  const realCurrentYearMonth = `${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}`;
+  const realCurrentHours = Object.keys(selectedDays)
+      .filter(d => d.startsWith(realCurrentYearMonth))
+      .reduce((s, d) => s + selectedDays[d], 0);
+      
+  const nextExpectedSalary = realCurrentHours * hourlyRate;
+  const nextExpectedVouchers = (realCurrentHours / 8) * 40;
+
   const totalMain = expenses.filter(e => e.card === 'main').reduce((s,e) => s + e.amount, 0);
   const totalVoucher = expenses.filter(e => e.card === 'voucher').reduce((s,e) => s + e.amount, 0);
   const savingsPotential = mainBalance * 0.2;
@@ -541,6 +554,29 @@ export default function Dashboard() {
                 subtitle="~20% din balanță principală" />
             </div>
 
+            {/* PREDICTIVE PANELS */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b' }}>
+                <Sparkles size={18} /> Finanțe Previzionate (Luna Următoare)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
+                <div style={{ ...cardStyle, border: '1px solid #f59e0b44', background: 'linear-gradient(135deg, #0f172a, #f59e0b11)' }}>
+                  <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Total Avere Principal (Bază + Salariu)</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{(mainBalance + nextExpectedSalary).toFixed(2)} <span style={{fontSize:12}}>RON</span></div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
+                    +{nextExpectedSalary.toFixed(0)} lei din salariu estimat
+                  </div>
+                </div>
+                <div style={{ ...cardStyle, border: '1px solid #10b98144', background: 'linear-gradient(135deg, #0f172a, #10b98111)' }}>
+                  <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Total Avere Bonuri (Bază + Bonuri viitoare)</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#10b981' }}>{(voucherBalance + nextExpectedVouchers).toFixed(2)} <span style={{fontSize:12}}>RON</span></div>
+                  <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
+                    +{nextExpectedVouchers.toFixed(0)} lei ({(realCurrentHours / 8).toFixed(1)} zile cumulate)
+                  </div>
+                </div>
+              </div>
+            </div>
+
             {/* Charts + Work Summary */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
               <div style={cardStyle}>
@@ -597,9 +633,9 @@ export default function Dashboard() {
             <div style={cardStyle}>
               <div style={{ fontWeight:700, marginBottom:4, fontSize:14 }}>Calendar Lucru</div>
               <div style={{ color:'#6b7280', fontSize:12, marginBottom:16 }}>
-                Click pe zi pentru a marca ca lucrată. Datele se salvează automat.
+                Click pe zi pentru a marca ca lucrată. Afișăm luna {calendarDate.toLocaleString('ro-RO', { month: 'long' })}.
               </div>
-              <MiniCalendar selectedDays={selectedDays} onSelect={handleDaySelect} />
+              <MiniCalendar selectedDays={selectedDays} onSelect={handleDaySelect} calendarDate={calendarDate} setCalendarDate={setCalendarDate} />
               
               {editingDate && (
                 <div style={{ marginTop:16, padding:16, background:'#1f2937', borderRadius:12, border:'1px solid #374151', animation:'slideIn 0.3s ease-out forwards' }}>
@@ -656,6 +692,7 @@ export default function Dashboard() {
                   { label:'Total zile lucrate', val:`${currentWorkDaysCount}` },
                   { label:'Total ore estimativ',      val:`${totalHoursWorked}h` },
                   { label:'Salariu de încasat',       val:`${estimatedSalary.toLocaleString('ro-RO')} RON` },
+                  { label:'Valoare Bonuri încasat',   val:`${estimatedVouchersAmount.toFixed(0)} RON` },
                   { label:'Următorul Salariu (din L-V)', val:`${getNextPayDate(10, false)}` },
                   { label:'Următoarele Bonuri (din L-V)', val:`${getNextPayDate(5, true)}` },
                 ].map(({ label, val }) => (

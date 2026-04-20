@@ -30,6 +30,14 @@ type Message = {
   image?: string;
 };
 
+type Goal = {
+  id: string;
+  title: string;
+  target_amount: number;
+  saved_amount: number;
+  deadline: string;
+};
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function BalanceCard({ title, balance, icon: Icon, color, subtitle }: {
@@ -153,9 +161,12 @@ export default function Dashboard() {
   const [hourlyRate, setHourlyRate] = useState(35);
   const [salary, setSalary] = useState<number | null>(null);
 
-  // Expenses state
-  const [expenses, setExpenses] = useState<Expense[]>([]);
-  const [newExp, setNewExp] = useState({ name:'', amount:'', category:'food', card:'main' });
+  // Goals state
+  const [goals, setGoals] = useState<Goal[]>([]);
+  const [newGoal, setNewGoal] = useState({ title: '', amount: '', deadline: '' });
+  
+  // Settings
+  const [swapAccounts, setSwapAccounts] = useState(false);
 
   // Balance state
   const [mainBalance, setMainBalance] = useState(0);
@@ -223,7 +234,11 @@ export default function Dashboard() {
         data.workDays.forEach((wd: any) => { daysRecord[wd.date] = wd.hours_worked; });
         setSelectedDays(daysRecord);
       }
-      if (data.settings?.hourly_rate) setHourlyRate(data.settings.hourly_rate);
+      if (data.goals) setGoals(data.goals);
+      if (data.settings) {
+        if (data.settings.hourly_rate) setHourlyRate(data.settings.hourly_rate);
+        if (data.settings.swap_accounts !== undefined) setSwapAccounts(data.settings.swap_accounts);
+      }
     } catch (err) {
       console.error("Failed to load dashboard data", err);
     } finally {
@@ -345,6 +360,20 @@ export default function Dashboard() {
   // Delete expense
   const handleDelete = (id: string) => setExpenses(prev => prev.filter(e => e.id !== id));
 
+  // Add Goal
+  const handleAddGoal = async () => {
+    if (!newGoal.title || !newGoal.amount || !newGoal.deadline) return;
+    try {
+      await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: MOCK_USER_ID, title: newGoal.title, target_amount: Number(newGoal.amount), deadline: newGoal.deadline })
+      });
+      fetchDashboardData();
+      setNewGoal({ title: '', amount: '', deadline: '' });
+    } catch (err) { console.error(err); }
+  };
+
   // Start editing a work day
   const handleDaySelect = (dateStr: string) => {
     setEditingDate(dateStr);
@@ -381,6 +410,28 @@ export default function Dashboard() {
         setSelectedImage(reader.result as string);
       };
       reader.readAsDataURL(file);
+    }
+  };
+
+  const handleSwapAccounts = async () => {
+    // Optimistic UI Swap
+    setSwapAccounts(prev => !prev);
+    // Realistically, to accurately reflect balances, we just swap local state or re-fetch dashboard.
+    // For visual immediacy, let's just trigger a swap of the balances locally too.
+    const tempMain = mainBalance;
+    setMainBalance(voucherBalance); // Wait, ING Savings vs Main. If we don't have separate variables for both, we swap main and savings!
+    setMainBalance(savingsBalance);
+    setSavingsBalance(tempMain);
+
+    try {
+      await fetch('/api/settings/swap', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: MOCK_USER_ID })
+      });
+      // Optionally sync to lock it in
+    } catch (err) {
+      console.error(err);
     }
   };
 
@@ -448,6 +499,7 @@ export default function Dashboard() {
 
   const tabs = [
     { id:'overview', label:'Overview',    icon:'◈' },
+    { id:'goals',    label:'Obiective',   icon:'🎯' },
     { id:'work',     label:'Lucru & AI',  icon:'◷' },
     { id:'expenses', label:'Cheltuieli',  icon:'◎' },
     { id:'chat',     label:'Asistent',    icon:'✦' },
@@ -473,6 +525,12 @@ export default function Dashboard() {
           <span style={{ fontWeight:800, fontSize:18, letterSpacing:'-0.5px' }}>BugetPersonal</span>
         </div>
         <div style={{ display:'flex', gap:8 }}>
+          <button onClick={handleSwapAccounts} style={{
+            display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
+            background:'#f59e0b22', border:'1px solid #f59e0b44', borderRadius:8,
+            color:'#f59e0b', fontSize:12, cursor:'pointer' }}>
+            🔁 Inversează Conturile
+          </button>
           <button onClick={handleSync} disabled={isSyncing} style={{
             display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
             background:'#1f2937', border:'1px solid #374151', borderRadius:8,
@@ -575,6 +633,7 @@ export default function Dashboard() {
                   </div>
                 </div>
               </div>
+              </div>
             </div>
 
             {/* Charts + Work Summary */}
@@ -585,13 +644,13 @@ export default function Dashboard() {
                   <div key={cat} style={{ marginBottom:12 }}>
                     <div style={{ display:'flex', justifyContent:'space-between', marginBottom:4 }}>
                       <span style={{ fontSize:12, color:'#9ca3af' }}>
-                        {CATEGORIES[cat].icon} {CATEGORIES[cat].label}
+                        {CATEGORIES[cat]?.icon} {CATEGORIES[cat]?.label}
                       </span>
                       <span style={{ fontSize:12, fontWeight:600 }}>{total.toFixed(0)} RON</span>
                     </div>
                     <div style={{ background:'#1f2937', borderRadius:4, height:6, overflow:'hidden' }}>
                       <div style={{ width:`${(total/maxCat)*100}%`, height:'100%',
-                        background:CATEGORIES[cat].color, borderRadius:4, transition:'width 0.5s' }} />
+                        background:CATEGORIES[cat]?.color, borderRadius:4, transition:'width 0.5s' }} />
                     </div>
                   </div>
                 ))}
@@ -623,6 +682,55 @@ export default function Dashboard() {
                   💬 Du-te în Asistent pentru a încărca fluturașul tău de salariu și AI-ul va actualiza valoarea automat!
                 </div>
               </div>
+            </div>
+          </div>
+        )}
+
+        {/* ── GOALS / OBIECTIVE ── */}
+        {activeTab === 'goals' && (
+          <div style={{ maxWidth: 800, margin: '0 auto' }}>
+            <div style={{ ...cardStyle, marginBottom: 20 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16 }}>Creare Obiectiv Nou</div>
+              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10 }}>
+                <input style={inputStyle} placeholder="Nume (ex: Chirie)" value={newGoal.title} onChange={e => setNewGoal({...newGoal, title:e.target.value})} />
+                <input style={inputStyle} type="number" placeholder="Sumă (RON)" value={newGoal.amount} onChange={e => setNewGoal({...newGoal, amount:e.target.value})} />
+                <input style={inputStyle} type="date" value={newGoal.deadline} onChange={e => setNewGoal({...newGoal, deadline:e.target.value})} />
+                <button onClick={handleAddGoal} style={{ background:'#10b981', border:'none', borderRadius:8, padding:'0 20px', color:'#fff', fontWeight:700, cursor:'pointer' }}>Adaugă</button>
+              </div>
+            </div>
+
+            <div style={{ display: 'flex', flexDirection: 'column', gap: 14 }}>
+              {goals.map(g => {
+                const percent = Math.min(100, Math.round((g.saved_amount / g.target_amount) * 100));
+                const d1 = new Date(); const d2 = new Date(g.deadline);
+                const daysLeft = Math.ceil((d2.getTime() - d1.getTime()) / (1000 * 3600 * 24));
+                const neededPerDay = daysLeft > 0 ? ((g.target_amount - g.saved_amount) / daysLeft).toFixed(1) : 0;
+                
+                return (
+                  <div key={g.id} style={{ ...cardStyle, position: 'relative', overflow: 'hidden' }}>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'flex-start', marginBottom: 12 }}>
+                      <div>
+                        <div style={{ fontSize: 18, fontWeight: 800, color: '#f9fafb' }}>{g.title}</div>
+                        <div style={{ fontSize: 13, color: '#9ca3af', marginTop: 4 }}>Deadline: {new Date(g.deadline).toLocaleDateString('ro-RO')} ({daysLeft > 0 ? `${daysLeft} zile rămase` : 'Expirat'})</div>
+                      </div>
+                      <div style={{ textAlign: 'right' }}>
+                        <div style={{ fontSize: 20, fontWeight: 800, color: '#10b981' }}>{g.saved_amount} <span style={{ fontSize: 14, color: '#6b7280' }}>/ {g.target_amount} RON</span></div>
+                        {daysLeft > 0 && g.saved_amount < g.target_amount && (
+                          <div style={{ fontSize: 12, color: '#f59e0b', marginTop: 4, background: '#f59e0b22', padding: '2px 8px', borderRadius: 4, display: 'inline-block' }}>
+                            Target Zilnic: {neededPerDay} RON / zi
+                          </div>
+                        )}
+                      </div>
+                    </div>
+                    
+                    <div style={{ background: '#1f2937', borderRadius: 8, height: 12, overflow: 'hidden', position: 'relative' }}>
+                      <div style={{ width: `${percent}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #34d399)', transition: 'width 1s ease-in-out' }} />
+                    </div>
+                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{percent}% Completat</div>
+                  </div>
+                );
+              })}
+              {goals.length === 0 && <div style={{ color: '#6b7280', textAlign: 'center', padding: '40px 0' }}>Nu ai setat niciun obiectiv încă. AI-ul abia așteaptă să te ajute să le atingi!</div>}
             </div>
           </div>
         )}

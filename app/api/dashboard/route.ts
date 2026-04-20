@@ -80,15 +80,23 @@ export async function POST(req: Request) {
     // 5. Fetch Settings
     const { data: settingsData } = await supabase
       .from('user_settings')
-      .select('hourly_rate')
+      .select('hourly_rate, swap_accounts')
       .eq('user_id', userId)
       .single();
+
+    // 6. Fetch Goals
+    const { data: goalsData } = await supabase
+      .from('goals')
+      .select('*')
+      .eq('user_id', userId)
+      .order('deadline', { ascending: true });
 
     return NextResponse.json({
       balances,
       expenses: unifiedExpenses,
       workDays: workDaysData || [],
-      settings: settingsData || { hourly_rate: 35 } // default to 35
+      goals: goalsData || [],
+      settings: settingsData || { hourly_rate: 35, swap_accounts: false } // default
     });
   } catch (error: any) {
     console.error('Error fetching dashboard data:', error);

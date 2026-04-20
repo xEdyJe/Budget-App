@@ -11,6 +11,7 @@ export async function POST(req: Request) {
 
     // 1. Fetch simplified context
     const { data: balancesData } = await supabase.from('card_balances').select('card, balance').eq('user_id', userId);
+    const { data: goalsData } = await supabase.from('goals').select('*').eq('user_id', userId);
 
     const thirtyDaysAgo = new Date();
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
@@ -25,9 +26,14 @@ export async function POST(req: Request) {
     const mainBalance = balancesData?.find((b: any) => b.card === 'main')?.balance || 0;
     const savingsBalance = balancesData?.find((b: any) => b.card === 'savings')?.balance || 0;
 
+    const goalsSummary = goalsData && goalsData.length > 0
+      ? "Obiective setate: " + goalsData.map((g: any) => `${g.title} (${g.saved_amount} din ${g.target_amount} RON strânși, termen: ${g.deadline})`).join(', ')
+      : "Momentan fără obiective de economisire stabilite.";
+
     const summary = `
     Am ${mainBalance} RON pe cardul principal, ${savingsBalance} RON in contul de economii. 
     In ultimele 30 zile am cheltuit aproximativ ${totalExtExp.toFixed(0)} RON în total.
+    ${goalsSummary}
     `;
 
     // 2. Apelăm Gemini pentru Daily Tips

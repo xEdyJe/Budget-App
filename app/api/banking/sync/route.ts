@@ -21,11 +21,20 @@ export async function POST(req: Request) {
     thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
     const dateFrom = thirtyDaysAgo.toISOString().split('T')[0];
 
+    // Fetch swap_accounts setting
+    const { data: settings } = await supabase.from('user_settings').select('swap_accounts').eq('user_id', userId).single();
+    const shouldSwap = settings?.swap_accounts || false;
+
     for (const acc of accounts) {
       // Determinăm tipul cardului bazat pe nume, deoarece coloana "type" nu este expusă clar.
       let cardType = 'main';
       if (acc.account_name && (acc.account_name.toLowerCase().includes('economii') || acc.account_name.includes('2') || acc.account_name.toLowerCase().includes('savings'))) {
           cardType = 'savings';
+      }
+
+      // Supra-scriere manuală prin Swap_Accounts
+      if (shouldSwap) {
+          cardType = cardType === 'main' ? 'savings' : 'main';
       }
 
       // 2. Sync Balances (for both main and savings)

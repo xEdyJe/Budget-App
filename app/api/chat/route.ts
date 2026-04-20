@@ -13,6 +13,7 @@ export async function POST(req: Request) {
 
     // 1. Preluăm contextul financiar curent
     const { data: balances } = await supabase.from('card_balances').select('*').eq('user_id', userId);
+    const { data: goals } = await supabase.from('goals').select('*').eq('user_id', userId);
 
     // 2. Construim "creierul" (Instrucțiunile de bază)
     // Am adăugat "update_hourly_rate" la lista ta de acțiuni posibile!
@@ -21,12 +22,15 @@ export async function POST(req: Request) {
       Context financiar curent:
       - Sold Card Principal: ${balances?.find((b: any) => b.card === 'main')?.balance || 0} RON
       - Sold Card Bonuri (Pluxee): ${balances?.find((b: any) => b.card === 'voucher')?.balance || 0} RON
+      - Obiective Financiare (Goals): ${goals && goals.length > 0 ? goals.map((g: any) => `${g.title}: ${g.saved_amount} / ${g.target_amount} RON (până pe ${g.deadline})`).join(', ') : 'Niciun obiectiv activ.'}
       
-      REGULĂ STRICTĂ NECELIAZĂ: Când procesezi un fluturaș de salariu, trebuie să deduci tariful orar net (salariul net / nr ore) SAU dacă recunoști o cheltuială nouă, TU EȘTI OBLIGAT să adaugi un bloc JSON la finalul textului. FĂRĂ ACEST JSON, BAZA DE DATE NU SE ACTUALIZEAZĂ.
+      REGULĂ STRICTĂ NECELIAZĂ: Când procesezi un fluturaș de salariu, sau adaugi cheltuieli, sau setezi obiective la cererea utilizatorului, TU EȘTI OBLIGAT să adaugi un bloc JSON la finalul textului. FĂRĂ ACEST JSON, BAZA DE DATE NU SE ACTUALIZEAZĂ.
       Lipește JSON-ul la final:
       {"action": "update_hourly_rate", "rate": NUMAR}
       SAU
       {"action": "add_expense", "name": "...", "amount": NUMAR, "category": "food", "card": "main"}
+      SAU (Pentru adăugarea unui nou obiectiv):
+      {"action": "add_goal", "title": "Numele dorintei", "amount": NUMAR, "deadline": "YYYY-MM-DD"}
       
       Nu folosi caractere markdown \`\`\` în jurul JSON-ului. Doar textul brut!
     `;
@@ -89,7 +93,16 @@ export async function POST(req: Request) {
           newHourlyRate = action.rate; // Trimitem spre frontend ca să dea refresh
         }
 
-        // (Aici poți adăuga pe viitor și logica pentru set_salary)
+        // Actiunea 3: Creare Objective / Goal nou
+        else if (action.action === 'add_goal') {
+          await supabase.from('goals').insert({
+            user_id: userId,
+            title: action.title,
+            target_amount: action.amount,
+            deadline: action.deadline
+          });
+          actionResult = `Obiectivul '${action.title}' a fost creat cu succes! Mult noroc la economisit!`;
+        }
 
       } catch (e) {
         console.error("Eroare la parsarea sau executarea acțiunii JSON:", e);

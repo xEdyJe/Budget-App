@@ -506,14 +506,15 @@ export default function Dashboard() {
   ];
 
   if (isInitializing) {
-    return <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#030712' }}>
-      <Loader2 size={32} color="#10b981" style={{ animation:'spin 1s linear infinite' }} />
-    </div>;
+    return (
+      <div style={{ height:'100vh', display:'flex', alignItems:'center', justifyContent:'center', background:'#030712' }}>
+        <Loader2 size={32} color="#10b981" style={{ animation:'spin 1s linear infinite' }} />
+      </div>
+    );
   }
 
   return (
-    <div style={{ minHeight:'100vh', background:'#030712', color:'#f9fafb',
-      fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
+    <div style={{ minHeight:'100vh', background:'#030712', color:'#f9fafb', fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
 
       {/* Header */}
       <div style={{ background:'#0a0f1a', borderBottom:'1px solid #1f2937',
@@ -632,7 +633,6 @@ export default function Dashboard() {
                     +{nextExpectedVouchers.toFixed(0)} lei ({(realCurrentHours / 8).toFixed(1)} zile cumulate)
                   </div>
                 </div>
-              </div>
               </div>
             </div>
 

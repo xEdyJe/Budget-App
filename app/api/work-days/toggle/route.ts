@@ -20,29 +20,27 @@ export async function POST(req: Request) {
       .single();
 
     if (existingDay) {
-      // If it exists and hours is 0, delete it (toggle off based on our logic maybe? Or we just delete)
-      // Actually let's assume if it exists we delete it to "toggle" it off.
-      const { error } = await supabase
-        .from('work_days')
-        .delete()
-        .eq('id', existingDay.id);
-        
-      if (error) throw error;
-      
-      return NextResponse.json({ success: true, action: 'removed' });
+      if (hours === 0) {
+        const { error } = await supabase.from('work_days').delete().eq('id', existingDay.id);
+        if (error) throw error;
+        return NextResponse.json({ success: true, action: 'removed' });
+      } else {
+        const { error } = await supabase.from('work_days').update({ hours_worked: hours }).eq('id', existingDay.id);
+        if (error) throw error;
+        return NextResponse.json({ success: true, action: 'updated' });
+      }
     } else {
-      // Insert it
-      const { error } = await supabase
-        .from('work_days')
-        .insert({
-          user_id: userId,
-          date: date, // YYYY-MM-DD
-          hours_worked: hours || 8
+      if (hours > 0) {
+        const { error } = await supabase.from('work_days').insert({
+            user_id: userId,
+            date: date,
+            hours_worked: hours
         });
-        
-      if (error) throw error;
-      
-      return NextResponse.json({ success: true, action: 'added' });
+        if (error) throw error;
+        return NextResponse.json({ success: true, action: 'added' });
+      } else {
+        return NextResponse.json({ success: true, action: 'none' });
+      }
     }
   } catch (error: any) {
     console.error('Error toggling work day:', error);

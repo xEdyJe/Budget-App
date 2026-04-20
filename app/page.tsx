@@ -54,8 +54,8 @@ function BalanceCard({ title, balance, icon: Icon, color, subtitle }: {
   );
 }
 
-function MiniCalendar({ selectedDays, onToggle }: {
-  selectedDays: string[]; onToggle: (dateStr: string) => void;
+function MiniCalendar({ selectedDays, onSelect }: {
+  selectedDays: Record<string, number>; onSelect: (dateStr: string) => void;
 }) {
   const [currentDate, setCurrentDate] = useState(() => new Date());
   
@@ -90,26 +90,53 @@ function MiniCalendar({ selectedDays, onToggle }: {
         {Array.from({ length: offset }).map((_,i) => <div key={`e${i}`} />)}
         {days.map(day => {
           const dateStr = `${year}-${String(month + 1).padStart(2, '0')}-${String(day).padStart(2, '0')}`;
-          const isSelected = selectedDays.includes(dateStr);
+          const isSelected = selectedDays[dateStr] !== undefined;
+          const hours = selectedDays[dateStr];
           const idx = (day + offset - 1) % 7;
           const isWeekend = idx === 5 || idx === 6;
           
           return (
-            <button key={day} onClick={() => onToggle(dateStr)} style={{
-              borderRadius:6, padding:'5px 0', fontSize:12,
+            <button key={day} onClick={() => onSelect(dateStr)} style={{
+              borderRadius:6, padding:'2px 0 5px 0', fontSize:12,
               fontWeight: isSelected ? 700 : 400,
               cursor: 'pointer',
+              display:'flex', flexDirection:'column', alignItems:'center', justifyContent:'center',
               background: isSelected ? 'linear-gradient(135deg,#10b981,#059669)'
                 : isWeekend ? 'transparent' : '#1f2937',
               color: isSelected ? '#fff' : isWeekend ? '#4b5563' : '#9ca3af',
               border: isSelected ? 'none' : '1px solid #1f2937',
               transition: 'all 0.15s'
-            }}>{day}</button>
+            }}>
+                {day}
+                {isSelected && <span style={{fontSize:8, fontWeight:800, marginTop:1, color:'#d1fae5'}}>{hours}h</span>}
+            </button>
           );
         })}
       </div>
     </div>
   );
+}
+
+// ─── Utils ───────────────────────────────────────────────────────────────────
+function getNextPayDate(targetDay: number, isVoucher: boolean) {
+  const now = new Date();
+  let year = now.getFullYear();
+  let month = now.getMonth();
+  
+  if (now.getDate() > targetDay) {
+    month++;
+    if (month > 11) { month = 0; year++; }
+  }
+  
+  const date = new Date(year, month, targetDay);
+  const dayOfWeek = date.getDay(); // 0 Duminica, 6 Sambata
+  
+  if (dayOfWeek === 6) {
+    date.setDate(targetDay + (isVoucher ? 2 : -1));
+  } else if (dayOfWeek === 0) {
+    date.setDate(targetDay + 1);
+  }
+  return date.toLocaleString('ro-RO', { day: 'numeric', month: 'long' });
 }
 
 // ─── Main Dashboard ───────────────────────────────────────────────────────────
@@ -119,7 +146,9 @@ export default function Dashboard() {
   const [isInitializing, setIsInitializing] = useState(true);
 
   // Work state
-  const [selectedDays, setSelectedDays] = useState<string[]>([]);
+  const [selectedDays, setSelectedDays] = useState<Record<string, number>>({});
+  const [editingDate, setEditingDate] = useState<string | null>(null);
+  const [editingHours, setEditingHours] = useState(8);
   const [hoursPerDay, setHoursPerDay] = useState(8);
   const [hourlyRate, setHourlyRate] = useState(35);
   const [salary, setSalary] = useState<number | null>(null);
@@ -153,7 +182,9 @@ export default function Dashboard() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   // Derived values
-  const estimatedSalary = selectedDays.length * hoursPerDay * hourlyRate;
+  const currentWorkDaysCount = Object.keys(selectedDays).length;
+  const totalHoursWorked = Object.values(selectedDays).reduce((s, h) => s + h, 0);
+  const estimatedSalary = totalHoursWorked * hourlyRate;
   const totalMain = expenses.filter(e => e.card === 'main').reduce((s,e) => s + e.amount, 0);
   const totalVoucher = expenses.filter(e => e.card === 'voucher').reduce((s,e) => s + e.amount, 0);
   const savingsPotential = mainBalance * 0.2;
@@ -175,8 +206,9 @@ export default function Dashboard() {
       }
       if (data.expenses) setExpenses(data.expenses);
       if (data.workDays) {
-        const days = data.workDays.map((wd: any) => wd.date);
-        setSelectedDays(days);
+        const daysRecord: Record<string, number> = {};
+        data.workDays.forEach((wd: any) => { daysRecord[wd.date] = wd.hours_worked; });
+        setSelectedDays(daysRecord);
       }
       if (data.settings?.hourly_rate) setHourlyRate(data.settings.hourly_rate);
     } catch (err) {
@@ -300,22 +332,30 @@ export default function Dashboard() {
   // Delete expense
   const handleDelete = (id: string) => setExpenses(prev => prev.filter(e => e.id !== id));
 
-  // Toggle work day
-  const toggleDay = async (dateStr: string) => {
-    const isCurrentlySelected = selectedDays.includes(dateStr);
-    // Optimistic UI update
-    setSelectedDays(prev =>
-      isCurrentlySelected ? prev.filter(d => d !== dateStr) : [...prev, dateStr].sort()
-    );
+  // Start editing a work day
+  const handleDaySelect = (dateStr: string) => {
+    setEditingDate(dateStr);
+    setEditingHours(selectedDays[dateStr] !== undefined ? selectedDays[dateStr] : hoursPerDay);
+  };
+
+  // Save specific hours for a day
+  const saveDayHours = async (dateStr: string, hours: number) => {
+    setSelectedDays(prev => {
+      const copy = { ...prev };
+      if (hours > 0) copy[dateStr] = hours;
+      else delete copy[dateStr];
+      return copy;
+    });
+    setEditingDate(null);
 
     try {
       await fetch('/api/work-days/toggle', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ userId: MOCK_USER_ID, date: dateStr, hours: hoursPerDay })
+        body: JSON.stringify({ userId: MOCK_USER_ID, date: dateStr, hours })
       });
     } catch (err) {
-      console.error("Failed to toggle work day", err);
+      console.error("Failed to save work day", err);
     }
   };
 
@@ -529,11 +569,12 @@ export default function Dashboard() {
               <div style={cardStyle}>
                 <div style={{ fontWeight:700, marginBottom:16, fontSize:14 }}>Rezumat Lunar Calendar</div>
                 {[
-                  { label:'Zile lucrate',       value:`${selectedDays.length} / ${DAYS_IN_MONTH}` },
-                  { label:'Ore lucrate',         value:`${selectedDays.length * hoursPerDay}h` },
+                  { label:'Zile lucrate',       value:`${currentWorkDaysCount} / ${DAYS_IN_MONTH}` },
+                  { label:'Ore lucrate',         value:`${totalHoursWorked}h` },
                   { label:'Salariu estimat următor', value:`${estimatedSalary.toLocaleString('ro-RO')} RON` },
                   { label:'Tarif orar curent',   value:`${hourlyRate} RON/oră` },
-                  { label:'Total cheltuieli luate',    value:`${(totalMain+totalVoucher).toFixed(2)} RON` },
+                  { label:'Data Salariu (10)',   value:`${getNextPayDate(10, false)}` },
+                  { label:'Data Bonuri (5)',     value:`${getNextPayDate(5, true)}` },
                 ].map(({ label, value }) => (
                   <div key={label} style={{ display:'flex', justifyContent:'space-between',
                     padding:'10px 0', borderBottom:'1px solid #1f2937' }}>
@@ -558,7 +599,27 @@ export default function Dashboard() {
               <div style={{ color:'#6b7280', fontSize:12, marginBottom:16 }}>
                 Click pe zi pentru a marca ca lucrată. Datele se salvează automat.
               </div>
-              <MiniCalendar selectedDays={selectedDays} onToggle={toggleDay} />
+              <MiniCalendar selectedDays={selectedDays} onSelect={handleDaySelect} />
+              
+              {editingDate && (
+                <div style={{ marginTop:16, padding:16, background:'#1f2937', borderRadius:12, border:'1px solid #374151', animation:'slideIn 0.3s ease-out forwards' }}>
+                  <div style={{ fontSize:13, fontWeight:600, color:'#f9fafb', marginBottom:12 }}>
+                    Câte ore ai lucrat pe {new Date(editingDate).toLocaleDateString('ro-RO')}?
+                  </div>
+                  <div style={{ display:'flex', gap:14, alignItems:'center', marginBottom:16 }}>
+                    <input type="range" min="0" max="14" step="0.5" 
+                      value={editingHours} onChange={e => setEditingHours(Number(e.target.value))}
+                      style={{ flex:1, accentColor:'#10b981' }} />
+                    <div style={{ background:'#10b98122', padding:'4px 10px', borderRadius:8, color:'#10b981', fontWeight:800, minWidth:48, textAlign:'center' }}>
+                      {editingHours}h
+                    </div>
+                  </div>
+                  <div style={{ display:'flex', justifyContent:'space-between', gap:10 }}>
+                    <button onClick={() => saveDayHours(editingDate, 0)} style={{ background:'transparent', color:'#ef4444', border:'none', padding:'8px 12px', borderRadius:8, cursor:'pointer', fontWeight:600 }}>Șterge / 0h</button>
+                    <button onClick={() => saveDayHours(editingDate, editingHours)} style={{ background:'#10b981', color:'#fff', border:'none', padding:'8px 20px', borderRadius:8, cursor:'pointer', fontWeight:700 }}>Salvează</button>
+                  </div>
+                </div>
+              )}
               <div style={{ marginTop:16, display:'flex', gap:12 }}>
                 {[
                   { color:'linear-gradient(135deg,#10b981,#059669)', label:'Lucrată' },
@@ -592,11 +653,11 @@ export default function Dashboard() {
               <div style={cardStyle}>
                 <div style={{ fontWeight:700, marginBottom:4, fontSize:14 }}>Statistici AI Predicție</div>
                 {[
-                  { label:'Total zile',     val:`${selectedDays.length}` },
-                  { label:'Total ore estimativ',      val:`${selectedDays.length * hoursPerDay}h` },
+                  { label:'Total zile lucrate', val:`${currentWorkDaysCount}` },
+                  { label:'Total ore estimativ',      val:`${totalHoursWorked}h` },
                   { label:'Salariu de încasat',       val:`${estimatedSalary.toLocaleString('ro-RO')} RON` },
-                  { label:'Tarif/oră extras',      val:`${hourlyRate} RON` },
-                  { label:'Medie/zi',       val:`${(estimatedSalary / (selectedDays.length || 1)).toFixed(0)} RON` },
+                  { label:'Următorul Salariu (din L-V)', val:`${getNextPayDate(10, false)}` },
+                  { label:'Următoarele Bonuri (din L-V)', val:`${getNextPayDate(5, true)}` },
                 ].map(({ label, val }) => (
                   <div key={label} style={{ display:'flex', justifyContent:'space-between',
                     padding:'8px 0', borderBottom:'1px solid #1f2937' }}>

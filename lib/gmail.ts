@@ -1,6 +1,23 @@
+function decodeBase64(data: string) {
+  return Buffer.from(data.replace(/-/g, '+').replace(/_/g, '/'), 'base64').toString();
+}
+
+function getEmailBody(payload: any): string {
+  let body = "";
+  if (payload.body?.data) {
+    body += decodeBase64(payload.body.data);
+  }
+  if (payload.parts) {
+    for (const part of payload.parts) {
+      body += getEmailBody(part);
+    }
+  }
+  return body;
+}
+
 export async function parsePluxeeEmails(accessToken: string, userId: string) {
-  // Căutăm email-uri din ultima lună de la Pluxee
-  const query = 'from:pluxee.ro (incarcat OR platit OR suma) newer_than:30d';
+  // Căutăm email-uri din ultima lună de la Pluxee cu un query mai larg
+  const query = 'from:pluxee.ro (incarcat OR alimentat OR platit OR suma OR reincarcare OR confirmat OR disponibil) newer_than:30d';
   const listRes = await fetch(`https://gmail.googleapis.com/gmail/v1/users/me/messages?q=${encodeURIComponent(query)}`, {
     headers: { 'Authorization': `Bearer ${accessToken}` }
   });
@@ -18,19 +35,21 @@ export async function parsePluxeeEmails(accessToken: string, userId: string) {
     });
     const email = await emailRes.json();
     
-    const content = email.snippet + " " + (email.payload?.body?.data || "");
+    // Decodificăm corpul email-ului complet
+    const bodyContent = getEmailBody(email.payload);
+    const content = (email.snippet + " " + bodyContent).replace(/\s+/g, ' ');
     const emailTimestamp = parseInt(email.internalDate);
 
-    // 1. Detectăm SOLDUL rămas
-    const matchSold = content.match(/(?:sold|disponibil|ramasa)(?:[^0-9]{1,30})(\d+[.,]\d{2})\s*(RON|lei)/i);
+    // 1. Detectăm SOLDUL rămas (Regex mai flexibil)
+    const matchSold = content.match(/(?:sold|disponibil|ramasa|total|noua valoare)(?:[^0-9]{1,50})(\d+[.,]\d{2})\s*(RON|lei)/i);
     if (matchSold && emailTimestamp > latestDate) {
        latestBalance = parseFloat(matchSold[1].replace(',', '.'));
        latestDate = emailTimestamp;
     }
 
-    // 2. Extragem corect suma tranzacției / încărcării
+    // 2. Extragem suma tranzacției
     let amount = 0;
-    const matchDirect = content.match(/(?:valoare de|suma de|platit|achitat|cheltuit|alimentat)(?:[^0-9]{1,30})(\d+[.,]\d{2})\s*(RON|lei)/i);
+    const matchDirect = content.match(/(?:valoare de|suma de|platit|achitat|cheltuit|alimentat|incarcat|reincarcat)(?:[^0-9]{1,30})(\d+[.,]\d{2})\s*(RON|lei)/i);
     
     if (matchDirect) {
         amount = parseFloat(matchDirect[1].replace(',', '.'));
@@ -38,14 +57,18 @@ export async function parsePluxeeEmails(accessToken: string, userId: string) {
         const matchesSume = [...content.matchAll(/(\d+[.,]\d{2})\s*(RON|lei)/gi)];
         if (matchesSume.length >= 2) {
              const sume = matchesSume.map(m => parseFloat(m[1].replace(',', '.')));
-             amount = Math.min(...sume); // Deductem suma mai mică ca fiind plata
+             // De obicei, într-un email de plată, suma mai mică e plata și cea mai mare e noul sold
+             // Excludem soldul dacă l-am detectat deja
+             const filteredSume = latestBalance ? sume.filter(s => s !== latestBalance) : sume;
+             amount = filteredSume.length > 0 ? Math.min(...filteredSume) : Math.min(...sume);
         } else if (matchesSume.length === 1) {
              amount = parseFloat(matchesSume[0][1].replace(',', '.'));
         }
     }
     
     // 3. Detectăm dacă e ÎNCĂRCARE sau PLATĂ
-    const isReload = content.toLowerCase().includes('incarcat') || content.toLowerCase().includes('alimentat') || content.toLowerCase().includes('primiti');
+    const contentLower = content.toLowerCase();
+    const isReload = contentLower.includes('incarcat') || contentLower.includes('alimentat') || contentLower.includes('primiti') || contentLower.includes('reincarcare');
     
     // 4. Comercianți
     const merchantMatch = content.match(/(?:la|comerciantul)\s+([^,.]+)/i);
@@ -64,4 +87,4 @@ export async function parsePluxeeEmails(accessToken: string, userId: string) {
   }
   
   return { extractedData, latestBalance };
-}
+}

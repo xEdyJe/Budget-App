@@ -583,15 +583,14 @@ export default function Dashboard() {
     <div style={{ minHeight:'100vh', background:'#030712', color:'#f9fafb', fontFamily:"'DM Sans','Segoe UI',sans-serif" }}>
 
       {/* Header */}
-      <div style={{ background:'#0a0f1a', borderBottom:'1px solid #1f2937',
-        padding:'16px 24px', display:'flex', alignItems:'center', justifyContent:'space-between' }}>
+      <div className="header-container">
         <div style={{ display:'flex', alignItems:'center', gap:10 }}>
           <div style={{ width:32, height:32, borderRadius:8,
             background:'linear-gradient(135deg,#10b981,#6366f1)',
             display:'flex', alignItems:'center', justifyContent:'center', fontSize:16 }}>◈</div>
           <span style={{ fontWeight:800, fontSize:18, letterSpacing:'-0.5px' }}>BugetPersonal</span>
         </div>
-        <div style={{ display:'flex', gap:8 }}>
+        <div className="sync-group">
           <button onClick={handleSwapAccounts} style={{
             display:'flex', alignItems:'center', gap:6, padding:'8px 14px',
             background:'#f59e0b22', border:'1px solid #f59e0b44', borderRadius:8,
@@ -618,8 +617,8 @@ export default function Dashboard() {
         </div>
       </div>
 
-      {/* Tabs */}
-      <div style={{ display:'flex', borderBottom:'1px solid #1f2937',
+      {/* Desktop Tabs */}
+      <div className="desktop-only" style={{ display:'flex', borderBottom:'1px solid #1f2937',
         background:'#0a0f1a', padding:'0 16px', overflowX:'auto' }}>
         {tabs.map(tab => (
           <button key={tab.id} onClick={() => setActiveTab(tab.id)}
@@ -629,20 +628,37 @@ export default function Dashboard() {
         ))}
       </div>
 
-      <div style={{ padding:20, maxWidth:960, margin:'0 auto' }}>
+      {/* Mobile Bottom Navigation */}
+      <div className="mobile-only" style={{ 
+        display:'none', position:'fixed', bottom:0, left:0, right:0, 
+        background:'#0a0f1a', borderTop:'1px solid #1f2937', 
+        padding:'8px 10px', zIndex:1000, justifyContent:'space-around', alignItems:'center' 
+      }}>
+        {tabs.map(tab => (
+          <button key={tab.id} onClick={() => setActiveTab(tab.id)}
+            style={{
+              display: 'flex', flexDirection: 'column', alignItems: 'center', gap: 4,
+              background: 'transparent', border: 'none', color: activeTab === tab.id ? '#10b981' : '#6b7280',
+              padding: '8px 0', minWidth: 60, cursor: 'pointer', transition:'all 0.2s'
+            }}>
+            <span style={{ fontSize: 20 }}>{tab.icon}</span>
+            <span style={{ fontSize: 10, fontWeight: 700 }}>{tab.label}</span>
+          </button>
+        ))}
+      </div>
+
+      <div className="main-container">
 
         {/* ── OVERVIEW ── */}
         {activeTab === 'overview' && (
           <div>
             {/* AI DAILY TIPS PANEL */}
-            <div style={{
+            <div className="header-flex" style={{
               background: 'linear-gradient(135deg, #10b98122, #6366f122)',
               border: '1px solid #10b98144',
               borderRadius: 16,
               padding: '24px',
               marginBottom: 20,
-              display: 'flex',
-              alignItems: 'center',
               gap: 20
             }}>
               <div style={{ background: '#10b981', padding: 16, borderRadius: '50%', color: '#fff' }}>
@@ -663,8 +679,7 @@ export default function Dashboard() {
             </div>
 
             {/* Balance Cards */}
-            <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
-              gap:14, marginBottom:20 }}>
+            <div className="responsive-grid-2" style={{ marginBottom:20 }}>
               <BalanceCard title="Sold Disponibil (Card Principal)" balance={safeMainBalance}
                 icon={Wallet} color="#10b981"
                 subtitle={unpaidSubscriptionsTotal > 0 ? `Balanță Bancă: ${mainBalance.toFixed(0)} - Facturi lunare rămase: ${unpaidSubscriptionsTotal} ` : `Toate facturile de luna curentă sunt plătite!`} />
@@ -684,7 +699,7 @@ export default function Dashboard() {
               <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, color: '#f59e0b' }}>
                 <Sparkles size={18} /> Finanțe Previzionate (Luna Următoare)
               </div>
-              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
+              <div className="responsive-grid-2">
                 <div style={{ ...cardStyle, border: '1px solid #f59e0b44', background: 'linear-gradient(135deg, #0f172a, #f59e0b11)' }}>
                   <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Total Avere Disponibilă (Bază + Salariu - Abonamente)</div>
                   <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{(mainBalance + nextExpectedSalary - totalSubscriptionsCost).toFixed(2)} <span style={{fontSize:12}}>RON</span></div>
@@ -734,7 +749,7 @@ export default function Dashboard() {
             </div>
 
             {/* Charts + Work Summary */}
-            <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
+            <div className="responsive-grid-2">
               <div style={cardStyle}>
                 <div style={{ fontWeight:700, marginBottom:16, fontSize:14 }}>Cheltuieli pe Categorii</div>
                 {catTotals.filter(c => c.total > 0).map(({ cat, total }) => (
@@ -788,7 +803,7 @@ export default function Dashboard() {
           <div style={{ maxWidth: 800, margin: '0 auto' }}>
             <div style={{ ...cardStyle, marginBottom: 20 }}>
               <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 16 }}>Creare Obiectiv Nou</div>
-              <div style={{ display: 'grid', gridTemplateColumns: '2fr 1fr 1fr auto', gap: 10 }}>
+              <div className="responsive-grid-goals">
                 <input style={inputStyle} placeholder="Nume (ex: Chirie)" value={newGoal.title} onChange={e => setNewGoal({...newGoal, title:e.target.value})} />
                 <input style={inputStyle} type="number" placeholder="Sumă (RON)" value={newGoal.amount} onChange={e => setNewGoal({...newGoal, amount:e.target.value})} />
                 <input style={inputStyle} type="date" value={newGoal.deadline} onChange={e => setNewGoal({...newGoal, deadline:e.target.value})} />
@@ -854,7 +869,7 @@ export default function Dashboard() {
 
         {/* ── LUCRU ── */}
         {activeTab === 'work' && (
-          <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:16 }}>
+          <div className="responsive-grid-2">
             <div style={cardStyle}>
               <div style={{ fontWeight:700, marginBottom:4, fontSize:14 }}>Calendar Lucru</div>
               <div style={{ color:'#6b7280', fontSize:12, marginBottom:16 }}>
@@ -938,7 +953,7 @@ export default function Dashboard() {
             {/* Add form */}
             <div style={{ ...cardStyle, marginBottom:16, border:'1px solid #374151' }}>
               <div style={{ fontWeight:700, marginBottom:12, fontSize:14 }}>+ Adaugă Cheltuială</div>
-              <div style={{ display:'grid', gridTemplateColumns:'2fr 1fr 1fr 1fr auto', gap:8 }}>
+              <div className="responsive-grid-expenses">
                 <input style={inputStyle} placeholder="Denumire..."
                   value={newExp.name} onChange={e => setNewExp(p => ({...p, name:e.target.value}))} />
                 <input style={inputStyle} type="number" placeholder="Sumă RON"
@@ -1015,7 +1030,7 @@ export default function Dashboard() {
 
         {/* ── CHAT ── */}
         {activeTab === 'chat' && (
-          <div style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 200px)' }}>
+          <div className="chat-mobile-wrapper" style={{ display:'flex', flexDirection:'column', height:'calc(100vh - 220px)' }}>
             {/* Messages */}
             <div style={{ flex:1, overflowY:'auto', ...cardStyle,
               borderRadius:'16px 16px 0 0', padding:20 }}>
@@ -1115,6 +1130,25 @@ export default function Dashboard() {
 
       <style>{`
         @import url('https://fonts.googleapis.com/css2?family=DM+Sans:wght@300;400;500;600;700;800&display=swap');
+        
+        .main-container { padding: 20px; max-width: 960px; margin: 0 auto; }
+        .responsive-grid-2 { display: grid; grid-template-columns: 1fr 1fr; gap: 14px; }
+        .responsive-grid-goals { display: grid; grid-template-columns: 2fr 1fr 1fr auto; gap: 10px; }
+        .responsive-grid-expenses { display: grid; grid-template-columns: 2fr 1fr 1fr 1fr auto; gap: 8px; }
+        .header-container { background: #0a0f1a; border-bottom: 1px solid #1f2937; padding: 16px 24px; display: flex; align-items: center; justify-content: space-between; flex-wrap: wrap; gap: 12px; }
+        
+        @media (max-width: 768px) {
+          .main-container { padding: 12px; padding-bottom: 100px; }
+          .responsive-grid-2 { grid-template-columns: 1fr; }
+          .responsive-grid-goals, .responsive-grid-expenses { grid-template-columns: 1fr; }
+          .desktop-only { display: none !important; }
+          .mobile-only { display: flex !important; }
+          .header-container { padding: 12px 16px; flex-direction: column; align-items: flex-start; }
+          .sync-group { width: 100%; display: flex; flex-wrap: wrap; gap: 8px; }
+          .header-flex { flex-direction: column; align-items: center; text-align: center; padding: 16px !important; }
+          .chat-mobile-wrapper { height: calc(100vh - 110px) !important; margin-bottom: 60px; }
+        }
+
         @keyframes spin { to { transform: rotate(360deg); } }
         @keyframes bounce { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-4px)} }
         @keyframes slideIn { 
@@ -1122,6 +1156,8 @@ export default function Dashboard() {
           to { opacity: 1; transform: translateY(0) scale(1); } 
         }
         button:hover { opacity: 0.85; }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-thumb { background: #374151; borderRadius: 10px; }
       `}</style>
     </div>
   );

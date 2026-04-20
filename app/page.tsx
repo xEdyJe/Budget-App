@@ -229,6 +229,15 @@ export default function Dashboard() {
   const totalVoucher = expenses.filter(e => e.card === 'voucher').reduce((s,e) => s + e.amount, 0);
   const savingsPotential = mainBalance * 0.2;
 
+  // New Derived Values for Safe Balances and Goal Mapping
+  const currentDay = new Date().getDate();
+  const unpaidSubscriptionsTotal = subscriptions.filter(s => s.due_day >= currentDay).reduce((s, sub) => s + sub.amount, 0);
+  const totalSubscriptionsCost = subscriptions.reduce((s, sub) => s + sub.amount, 0);
+  
+  const totalGoalsSaved = goals.reduce((s, g) => s + g.saved_amount, 0);
+  const unallocatedSavings = savingsBalance - totalGoalsSaved;
+  const safeMainBalance = mainBalance - unpaidSubscriptionsTotal;
+
   // Function to load all data from database seamlessly
   const fetchDashboardData = async (silent = false) => {
     if (!silent) setIsInitializing(true);
@@ -656,15 +665,15 @@ export default function Dashboard() {
             {/* Balance Cards */}
             <div style={{ display:'grid', gridTemplateColumns:'repeat(auto-fit,minmax(200px,1fr))',
               gap:14, marginBottom:20 }}>
-              <BalanceCard title="Card Principal (ING)" balance={mainBalance}
+              <BalanceCard title="Sold Disponibil (Card Principal)" balance={safeMainBalance}
                 icon={Wallet} color="#10b981"
-                subtitle={`−${totalMain.toFixed(0)} RON cheltuieli luna curentă`} />
+                subtitle={unpaidSubscriptionsTotal > 0 ? `Balanță Bancă: ${mainBalance.toFixed(0)} - Facturi lunare rămase: ${unpaidSubscriptionsTotal} ` : `Toate facturile de luna curentă sunt plătite!`} />
               <BalanceCard title="Card Bonuri (Pluxee)" balance={voucherBalance}
                 icon={TrendingDown} color="#6366f1"
                 subtitle={`−${totalVoucher.toFixed(0)} RON cheltuieli luna curentă`} />
               <BalanceCard title="Cont Economii" balance={savingsBalance}
                 icon={PiggyBank} color="#f59e0b"
-                subtitle="ING Savings" />
+                subtitle={`Alocat Obiective: ${totalGoalsSaved} RON | Liberi: ${unallocatedSavings > 0 ? unallocatedSavings.toFixed(0) : 0} RON`} />
               <BalanceCard title="Economii Posibile" balance={savingsPotential}
                 icon={PiggyBank} color="#ec4899"
                 subtitle="~20% din balanță principală" />
@@ -677,10 +686,10 @@ export default function Dashboard() {
               </div>
               <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
                 <div style={{ ...cardStyle, border: '1px solid #f59e0b44', background: 'linear-gradient(135deg, #0f172a, #f59e0b11)' }}>
-                  <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Total Avere Principal (Bază + Salariu)</div>
-                  <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{(mainBalance + nextExpectedSalary).toFixed(2)} <span style={{fontSize:12}}>RON</span></div>
+                  <div style={{ fontSize: 12, color: '#9ca3af', marginBottom: 4 }}>Total Avere Disponibilă (Bază + Salariu - Abonamente)</div>
+                  <div style={{ fontSize: 24, fontWeight: 800, color: '#f59e0b' }}>{(mainBalance + nextExpectedSalary - totalSubscriptionsCost).toFixed(2)} <span style={{fontSize:12}}>RON</span></div>
                   <div style={{ fontSize: 12, color: '#6b7280', marginTop: 8 }}>
-                    +{nextExpectedSalary.toFixed(0)} lei din salariu estimat
+                    +{nextExpectedSalary.toFixed(0)} lei (Estimat luna viit.) − {totalSubscriptionsCost} lei (Toate facturile)
                   </div>
                 </div>
                 <div style={{ ...cardStyle, border: '1px solid #10b98144', background: 'linear-gradient(135deg, #0f172a, #10b98111)' }}>

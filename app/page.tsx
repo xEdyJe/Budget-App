@@ -38,6 +38,13 @@ type Goal = {
   deadline: string;
 };
 
+type Subscription = {
+  id: string;
+  name: string;
+  amount: number;
+  due_day: number;
+};
+
 // ─── Sub-components ──────────────────────────────────────────────────────────
 
 function BalanceCard({ title, balance, icon: Icon, color, subtitle }: {
@@ -168,7 +175,12 @@ export default function Dashboard() {
   // Goals state
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoal, setNewGoal] = useState({ title: '', amount: '', deadline: '' });
+  const [fundInput, setFundInput] = useState<{ [key: string]: string }>({});
   
+  // Subscriptions state
+  const [subscriptions, setSubscriptions] = useState<Subscription[]>([]);
+  const [newSub, setNewSub] = useState({ name: '', amount: '', due_day: '' });
+
   // Settings
   const [swapAccounts, setSwapAccounts] = useState(false);
 
@@ -239,6 +251,7 @@ export default function Dashboard() {
         setSelectedDays(daysRecord);
       }
       if (data.goals) setGoals(data.goals);
+      if (data.subscriptions) setSubscriptions(data.subscriptions);
       if (data.settings) {
         if (data.settings.hourly_rate) setHourlyRate(data.settings.hourly_rate);
         if (data.settings.swap_accounts !== undefined) setSwapAccounts(data.settings.swap_accounts);
@@ -376,6 +389,46 @@ export default function Dashboard() {
       fetchDashboardData();
       setNewGoal({ title: '', amount: '', deadline: '' });
     } catch (err) { console.error(err); }
+  };
+
+  // Add Funds to Goal
+  const handleAddFund = async (goalId: string) => {
+    const amount = Number(fundInput[goalId]);
+    if (!amount || amount <= 0) return;
+    try {
+      await fetch('/api/goals', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ userId: MOCK_USER_ID, goalId, add_amount: amount })
+      });
+      setFundInput({ ...fundInput, [goalId]: '' });
+      fetchDashboardData();
+    } catch (err) { console.error(err); }
+  };
+
+  // Add / Delete Subscription
+  const handleAddSubscription = async () => {
+    if (!newSub.name || !newSub.amount || !newSub.due_day) return;
+    try {
+      await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'add', userId: MOCK_USER_ID, name: newSub.name, amount: Number(newSub.amount), due_day: Number(newSub.due_day) })
+      });
+      fetchDashboardData();
+      setNewSub({ name: '', amount: '', due_day: '' });
+    } catch (e) { console.error(e); }
+  };
+
+  const handleDeleteSubscription = async (id: string) => {
+    try {
+      await fetch('/api/subscriptions', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ action: 'delete', userId: MOCK_USER_ID, id })
+      });
+      fetchDashboardData();
+    } catch (e) { console.error(e); }
   };
 
   // Start editing a work day
@@ -639,6 +692,37 @@ export default function Dashboard() {
                 </div>
               </div>
             </div>
+            {/* SUBSCRIPTIONS PANEL */}
+            <div style={{ marginBottom: 20 }}>
+              <div style={{ fontWeight: 800, fontSize: 16, marginBottom: 12, display: 'flex', alignItems: 'center', gap: 6, color: '#ec4899' }}>
+                <TrendingDown size={18} /> Costuri Fixe lunare (Abonamente)
+              </div>
+              <div style={{ display: 'grid', gridTemplateColumns: 'repeat(auto-fit,minmax(200px,1fr))', gap: 14 }}>
+                {subscriptions.map(s => (
+                  <div key={s.id} style={{ ...cardStyle, display: 'flex', justifyContent: 'space-between', alignItems: 'center', padding: '16px' }}>
+                    <div>
+                      <div style={{ fontSize: 16, fontWeight: 700, color: '#f9fafb' }}>{s.name}</div>
+                      <div style={{ fontSize: 12, color: '#9ca3af' }}>Zi de plată: {s.due_day}</div>
+                    </div>
+                    <div style={{ textAlign: 'right' }}>
+                      <div style={{ fontSize: 16, fontWeight: 800, color: '#ec4899' }}>-{s.amount} <span style={{fontSize:11}}>RON</span></div>
+                      <button onClick={() => handleDeleteSubscription(s.id)} style={{ background: 'transparent', border: 'none', color: '#ef4444', fontSize: 11, cursor: 'pointer', marginTop: 4 }}>Șterge</button>
+                    </div>
+                  </div>
+                ))}
+                <div style={{ ...cardStyle, padding: '16px', display: 'flex', flexDirection: 'column', gap: 8, justifyContent: 'center' }}>
+                  <div style={{ fontSize: 12, fontWeight: 700, color: '#9ca3af', marginBottom: 4 }}>Adaugă Abonament Nou</div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input style={{...inputStyle, padding: '6px 10px'}} placeholder="Nume" value={newSub.name} onChange={e => setNewSub({...newSub, name: e.target.value})} />
+                    <input style={{...inputStyle, padding: '6px 10px', width: 60}} type="number" placeholder="RON" value={newSub.amount} onChange={e => setNewSub({...newSub, amount: e.target.value})} />
+                  </div>
+                  <div style={{ display: 'flex', gap: 6 }}>
+                    <input style={{...inputStyle, padding: '6px 10px'}} type="number" placeholder="Zi plată (1-31)" value={newSub.due_day} onChange={e => setNewSub({...newSub, due_day: e.target.value})} />
+                    <button onClick={handleAddSubscription} style={{ background:'#ec4899', border:'none', borderRadius:8, padding:'0 14px', color:'#fff', fontWeight:700, cursor:'pointer' }}>+</button>
+                  </div>
+                </div>
+              </div>
+            </div>
 
             {/* Charts + Work Summary */}
             <div style={{ display:'grid', gridTemplateColumns:'1fr 1fr', gap:14 }}>
@@ -730,7 +814,27 @@ export default function Dashboard() {
                     <div style={{ background: '#1f2937', borderRadius: 8, height: 12, overflow: 'hidden', position: 'relative' }}>
                       <div style={{ width: `${percent}%`, height: '100%', background: 'linear-gradient(90deg, #10b981, #34d399)', transition: 'width 1s ease-in-out' }} />
                     </div>
-                    <div style={{ display: 'flex', justifyContent: 'center', marginTop: 8, fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{percent}% Completat</div>
+                    <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginTop: 12 }}>
+                      <div style={{ fontSize: 11, fontWeight: 700, color: '#9ca3af' }}>{percent}% Completat</div>
+                      
+                      {daysLeft > 0 && g.saved_amount < g.target_amount && (
+                        <div style={{ display: 'flex', gap: 6 }}>
+                          <input 
+                            style={{ ...inputStyle, padding: '4px 8px', width: 80 }} 
+                            placeholder="+RON" 
+                            type="number"
+                            value={fundInput[g.id] || ''} 
+                            onChange={e => setFundInput({ ...fundInput, [g.id]: e.target.value })} 
+                          />
+                          <button 
+                            onClick={() => handleAddFund(g.id)} 
+                            style={{ background: '#10b981', border: 'none', borderRadius: 6, color: '#fff', padding: '4px 10px', fontWeight: 700, cursor: 'pointer' }}
+                          >
+                            Depune
+                          </button>
+                        </div>
+                      )}
+                    </div>
                   </div>
                 );
               })}

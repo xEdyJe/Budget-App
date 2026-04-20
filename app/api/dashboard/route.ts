@@ -91,11 +91,19 @@ export async function POST(req: Request) {
       .eq('user_id', userId)
       .order('deadline', { ascending: true });
 
+    // 7. Fetch Subscriptions
+    const { data: subsData } = await supabase
+      .from('subscriptions')
+      .select('*')
+      .eq('user_id', userId)
+      .order('due_day', { ascending: true });
+
     return NextResponse.json({
       balances,
       expenses: unifiedExpenses,
       workDays: workDaysData || [],
       goals: goalsData || [],
+      subscriptions: subsData || [],
       settings: settingsData || { hourly_rate: 35, swap_accounts: false } // default
     });
   } catch (error: any) {

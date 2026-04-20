@@ -3,6 +3,8 @@ import { startAuthSession } from '@/lib/enablebanking';
 import { cookies } from 'next/headers';
 import crypto from 'crypto';
 
+export const dynamic = 'force-dynamic';
+
 export async function GET(req: NextRequest) {
   try {
     const state = crypto.randomUUID();

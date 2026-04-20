@@ -161,6 +161,10 @@ export default function Dashboard() {
   const [hourlyRate, setHourlyRate] = useState(35);
   const [salary, setSalary] = useState<number | null>(null);
 
+  // Expenses state
+  const [expenses, setExpenses] = useState<Expense[]>([]);
+  const [newExp, setNewExp] = useState({ name:'', amount:'', category:'food', card:'main' });
+
   // Goals state
   const [goals, setGoals] = useState<Goal[]>([]);
   const [newGoal, setNewGoal] = useState({ title: '', amount: '', deadline: '' });
